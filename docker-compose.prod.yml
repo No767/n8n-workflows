@@ -1,0 +1,16 @@
+name: n8n
+
+include:
+  - path: docker-compose.yml
+    project_directory: .
+
+services:
+  sandbox-runner-1:
+    privileged: false
+    runtime: sysbox-runc
+
+  n8n:
+    environment:
+      N8N_EDITOR_BASE_URL: https://n8n.pastelpink.dev/
+      N8N_WEBHOOK_URL: https://n8n-webhooks.taile2ba99.ts.net/
+      N8N_PROXY_HOPS: "1"

@@ -1,0 +1,8 @@
+# Environment variables
+secrets.local.env
+
+*.agekey
+keys.txt
+
+# Audits for agentic workflows
+.audits

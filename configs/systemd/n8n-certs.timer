@@ -1,0 +1,10 @@
+[Unit]
+Description=Renew n8n Let's Encrypt certs
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

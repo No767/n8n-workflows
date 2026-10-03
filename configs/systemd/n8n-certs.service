@@ -1,0 +1,45 @@
+[Unit]
+Description=Renew n8n Let's Encrypt certs
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+TimeoutStartSec=15min
+WorkingDirectory=/opt/n8n-workflows
+LoadCredentialEncrypted=age.key
+Environment=SOPS_AGE_KEY_FILE=%d/age.key
+ExecStart=/usr/bin/sops exec-env secrets.sops.yml 'docker compose -f compose.certs.yml up --abort-on-container-exit'
+ExecStartPost=-/usr/bin/docker kill --signal=HUP n8n_nginx
+
+DynamicUser=yes
+SupplementaryGroups=docker
+CapabilityBoundingSet=
+NoNewPrivileges=yes
+UMask=0077
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+PrivateUsers=yes
+PrivateTmp=yes
+PrivateDevices=yes
+DevicePolicy=closed
+ProtectSystem=strict
+ProtectHome=yes
+ProtectProc=invisible
+ProcSubset=pid
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM

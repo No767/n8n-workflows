@@ -1,0 +1,314 @@
+name: n8n
+
+x-hardening: &hard
+  read_only: true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=32m
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  n8n:
+    <<: *hard
+    container_name: n8n
+    image: docker.io/n8nio/n8n:2.40.7@sha256:ffeb52485f78b1b06c9a832205853cf75da72a07a514c9a27724df85979d6c34
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: database
+      DB_POSTGRESDB_USER: n8n
+
+      N8N_RUNNERS_MODE: external
+      N8N_RUNNERS_BROKER_LISTEN_ADDRESS: 0.0.0.0
+
+      N8N_DEFAULT_BINARY_DATA_MODE: database
+
+      N8N_INSTANCE_AI_SANDBOX_ENABLED: "true"
+      N8N_INSTANCE_AI_SANDBOX_PROVIDER: n8n-sandbox
+      N8N_INSTANCE_AI_SEARXNG_URL: http://searxng:8080
+
+      N8N_SANDBOX_SERVICE_URL: http://sandbox-api:8080
+
+      N8N_PUBLIC_API_DISABLED: "true"
+      N8N_COMMUNITY_PACKAGES_ENABLED: "false"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+
+      DB_POSTGRESDB_PASSWORD_FILE: /run/secrets/n8nDbPassword
+      N8N_ENCRYPTION_KEY_FILE: /run/secrets/n8nEncryptionKey
+      N8N_RUNNERS_AUTH_TOKEN_FILE: /run/secrets/runnersAuthToken
+      N8N_SANDBOX_SERVICE_API_KEY_FILE: /run/secrets/sandboxApiKey
+    secrets:
+      - n8nEncryptionKey
+      - n8nDbPassword
+      - runnersAuthToken
+      - sandboxApiKey
+    ports:
+      - 127.0.0.1:5678:5678
+    networks:
+      - default
+      - db-bridge
+    read_only: false
+    depends_on:
+      database:
+        condition: service_healthy
+      sandbox-api:
+        condition: service_healthy
+    healthcheck:
+      test: wget -qO /dev/null http://localhost:5678/healthz/readiness
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 3m
+      start_interval: 5s
+    restart: always
+
+  runners:
+    <<: *hard
+    container_name: n8n_runners
+    image: ghcr.io/n8n-io/runners:2.40.7@sha256:2a76a2c69ec50c8210c866918de106b592ab4a566c290e5a9a78dc3a6e0351bf
+    environment:
+      N8N_RUNNERS_AUTH_TOKEN: ${N8N_RUNNERS_AUTH_TOKEN}
+
+      N8N_RUNNERS_TASK_BROKER_URI: http://n8n:5679
+      N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT: "15"
+    depends_on:
+      n8n:
+        condition: service_healthy
+    healthcheck:
+      test: wget -qO /dev/null http://localhost:5680/healthz
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 5s
+    restart: always
+
+  sandbox-runner-1:
+    container_name: n8n_sandbox_runner_1
+    image: ghcr.io/n8n-io/n8n-sandbox-service-runner-dind:1.3.4@sha256:a065eb3480600104a8e5bdcb23d73f7057d61dbf53f749cf4901b075612c51db
+    environment:
+      SANDBOX_RUNNER_DOCKER_SANDBOX_IMAGE: ghcr.io/n8n-io/n8n-sandbox-service-sandbox:1.3.4@sha256:634b2c28f03db91803cc8d0b0a03bbf75f9d5d09b531277ecd5c82877ef7ae5d
+      SANDBOX_RUNNER_REGISTRATION_TOKEN: ${SANDBOX_REGISTRATION_TOKEN}
+      SANDBOX_RUNNER_API_KEYS: ${SANDBOX_RUNNER_API_KEY}
+
+      SANDBOX_RUNNER_ID: runner-1
+      SANDBOX_RUNNER_REGISTRATION_GRPC_SERVER_NAME: sandbox-api
+
+      SANDBOX_RUNNER_HTTP_BASE_URL: https://sandbox-runner-1:8080
+
+      SANDBOX_RUNNER_API_GRPC_ADDR: sandbox-api:9090
+      SANDBOX_RUNNER_CONTROL_GRPC_LISTEN_ADDR: :9091
+      SANDBOX_RUNNER_CONTROL_GRPC_ADVERTISE_ADDR: sandbox-runner-1:9091
+
+      SANDBOX_RUNNER_REGISTRATION_GRPC_CA_FILE: /tls/runner/ca.crt
+      SANDBOX_RUNNER_REGISTRATION_GRPC_CERT_FILE: /tls/runner/grpc-client.crt
+      SANDBOX_RUNNER_REGISTRATION_GRPC_KEY_FILE: /tls/runner/grpc-client.key
+      SANDBOX_RUNNER_CONTROL_GRPC_TLS_CERT_FILE: /tls/runner/control-grpc-server.crt
+      SANDBOX_RUNNER_CONTROL_GRPC_TLS_KEY_FILE: /tls/runner/control-grpc-server.key
+      SANDBOX_RUNNER_CONTROL_GRPC_TLS_CLIENT_CA_FILE: /tls/runner/ca.crt
+    volumes:
+      - sandbox-tls:/tls:ro
+      - sandbox:/var/lib/docker
+    privileged: true
+    depends_on:
+      sandbox-api:
+        condition: service_healthy
+    restart: always
+
+  sandbox-api:
+    <<: *hard
+    container_name: n8n_sandbox_api
+    image: ghcr.io/n8n-io/n8n-sandbox-service-api:1.3.4@sha256:fb14de143c66aef84a2f0f81332365cd2aa2acab4140549226d8f1e533cec5ab
+    environment:
+      SANDBOX_API_KEYS: ${SANDBOX_API_KEY}
+      SANDBOX_API_RUNNER_REGISTRATION_TOKEN: ${SANDBOX_REGISTRATION_TOKEN}
+      SANDBOX_API_RUNNER_API_KEY: ${SANDBOX_RUNNER_API_KEY}
+
+      SANDBOX_API_RUNNER_CONTROL_GRPC_TLS_SERVER_NAME: sandbox-runner-1
+
+      SANDBOX_API_GRPC_TLS_CERT_FILE: /tls/api/grpc-server.crt
+      SANDBOX_API_GRPC_TLS_KEY_FILE: /tls/api/grpc-server.key
+      SANDBOX_API_GRPC_TLS_CLIENT_CA_FILE: /tls/api/ca.crt
+      SANDBOX_API_RUNNER_CONTROL_GRPC_TLS_CA_FILE: /tls/api/ca.crt
+      SANDBOX_API_RUNNER_CONTROL_GRPC_TLS_CERT_FILE: /tls/api/control-grpc-api-client.crt
+      SANDBOX_API_RUNNER_CONTROL_GRPC_TLS_KEY_FILE: /tls/api/control-grpc-api-client.key
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+      - /var/lib/n8n-sandbox-api:rw,noexec,nosuid,size=32m,uid=100,gid=101
+    volumes:
+      - sandbox-tls:/tls:ro
+    depends_on:
+      sandbox-certs:
+        condition: service_completed_successfully
+    healthcheck:
+      test: wget -qO /dev/null http://localhost:8080/healthz
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 5s
+    restart: always
+
+  sandbox-certs:
+    <<: *hard
+    container_name: n8n_sandbox_certs
+    image: ghcr.io/n8n-io/n8n-sandbox-service-api:1.3.4@sha256:fb14de143c66aef84a2f0f81332365cd2aa2acab4140549226d8f1e533cec5ab
+    user: 0:0
+    environment:
+      NUM_RUNNERS: "1"
+    entrypoint:
+      - sh
+      - -c
+    command:
+      - >
+        bootstrap-mtls.sh --out-dir /tls --api-san sandbox-api
+        --control-san-prefix sandbox-runner --world-readable &&
+        chown -R sandbox-api:sandbox-api /tls/api && chmod -R a+rX /tls
+    cap_add:
+      - CHOWN
+      - FOWNER
+    volumes:
+      - sandbox-tls:/tls
+    restart: "no"
+
+  searxng:
+    <<: *hard
+    container_name: n8n_searxng
+    image: ghcr.io/searxng/searxng@sha256:eb2a404db174d33a04cd9f2e519bcae2ca722a58923510652cc1314be94e8e63
+    user: 977:977
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET}
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+      - /etc/searxng:rw,noexec,nosuid,size=1m,uid=977,gid=977
+      - /var/cache/searxng:rw,noexec,nosuid,size=32m,uid=977,gid=977
+    volumes:
+      - ./configs/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    healthcheck:
+      test: wget -qO /dev/null http://localhost:8080/healthz
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 5s
+    restart: always
+
+  database:
+    <<: *hard
+    container_name: n8n_database
+    image: postgres:18@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722
+    user: 999:999
+    environment:
+      POSTGRES_DB: n8n
+      POSTGRES_USER: postgres
+      POSTGRES_INITDB_ARGS: --data-checksums
+
+      N8N_PASSWORD_FILE: /run/secrets/n8nDbPassword
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgresPassword
+    secrets:
+      - postgresPassword
+      - n8nDbPassword
+    command: postgres -c hba_file=/etc/postgresql/pg_hba.conf
+    networks:
+      - db-bridge
+    volumes:
+      - database:/var/lib/postgresql
+      - ./configs/postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./configs/postgres/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+    read_only: false
+    healthcheck:
+      test: pg_isready --dbname="$${POSTGRES_DB}" --username="$${POSTGRES_USER}" || exit 1; Chksum="$$(psql --dbname='postgres' --username='postgres_monitor' --tuples-only --no-align --command='SELECT COALESCE(SUM(checksum_failures), 0) FROM pg_stat_database')"; echo "checksum failure count is $$Chksum"; [ "$$Chksum" = '0' ] || exit 1
+      interval: 5m
+      start_interval: 30s
+      start_period: 5m
+    restart: always
+
+  nginx:
+    <<: *hard
+    container_name: n8n_nginx
+    image: nginx:1.31.6@sha256:908dc23e643a1447dbfb2e189ed268bfde6a51a5bf9a34d3dd3440a24f58ccf7
+    ports:
+      - 127.0.0.1:443:443
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+      - /run:rw,noexec,nosuid,size=1m
+      - /var/cache/nginx:rw,noexec,nosuid,size=32m
+    volumes:
+      - ./configs/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - certs:/etc/letsencrypt:ro
+    depends_on:
+      n8n:
+        condition: service_healthy
+        restart: true
+    healthcheck:
+      test: curl -sSo /dev/null http://localhost:8000/
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 5s
+    restart: always
+
+  tailscale:
+    <<: *hard
+    container_name: n8n_tailscale
+    image: tailscale/tailscale:v1.102.5@sha256:c507f3a2a6ab1cabd8d809b98edeb41edbd5c3fb6ad9632ffd098b4c7d0b4065
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+
+      TS_HOSTNAME: n8n-webhooks
+      TS_AUTH_ONCE: "true"
+
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+
+      TS_ENABLE_HEALTH_CHECK: "true"
+      TS_LOCAL_ADDR_PORT: 127.0.0.1:9002
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+      - /var/run/tailscale:rw,noexec,nosuid,size=1m
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - ./configs/tailscale:/config:ro
+    depends_on:
+      nginx:
+        condition: service_healthy
+    healthcheck:
+      test: wget -qO /dev/null http://127.0.0.1:9002/healthz
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 1m
+      start_interval: 5s
+    restart: always
+
+secrets:
+  n8nEncryptionKey:
+    environment: N8N_ENCRYPTION_KEY
+  postgresPassword:
+    environment: POSTGRES_PASSWORD
+  n8nDbPassword:
+    environment: N8N_DB_PASSWORD
+  runnersAuthToken:
+    environment: N8N_RUNNERS_AUTH_TOKEN
+  sandboxApiKey:
+    environment: SANDBOX_API_KEY
+
+volumes:
+  database:
+  sandbox-tls:
+  sandbox:
+  tailscale-state:
+  certs:
+    name: n8n_certs
+    external: true
+
+networks:
+  db-bridge:
+    internal: true

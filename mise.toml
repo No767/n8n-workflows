@@ -1,0 +1,100 @@
+[tools]
+age = "latest"
+dprint = "latest"
+gum = "latest"
+jq = "latest"
+shellcheck = "latest"
+shfmt = "latest"
+sops = "latest"
+uv = "latest"
+yamllint = "latest"
+yq = "latest"
+
+[env]
+NGINX_VERSION = "1.30.5-alpine-slim@sha256:1dcab0ce2a09f2f162804e5d06198736fd064d757e024d64f11d6bd57ee753f0"
+GIXY_NEXT_VERSION = "7.0.1@sha256:810fbc5ab6a88b24d7424974f258780e6ce5ee7469c20dbb2523cbe1dcd07863"
+
+[tasks."docker:up"]
+alias = ["up"]
+depends = ["server:check-env"]
+description = "Runs the local stack for development"
+run = "docker compose --env-file secrets.local.env up -d"
+
+[tasks."docker:certs"]
+alias = ["certs"]
+depends = ["server:check-env"]
+description = "Generate Let's Encrypt certs for deployment"
+dir = "{{ config_root }}"
+run = "sops exec-env secrets.sops.yml 'docker compose -f docker-compose.certs.yml up --abort-on-container-exit'"
+
+[tasks."docker:stop"]
+alias = ["stop"]
+depends = ["server:check-env"]
+description = "Stops the local stack"
+run = "docker compose --env-file secrets.local.env stop"
+
+[tasks."docker:down"]
+alias = ["down"]
+depends = ["server:check-env"]
+description = "Tears down the local stack"
+run = "docker compose --env-file secrets.local.env down -v=True"
+
+[tasks."server:check-env"]
+hide = true
+run = "test -f {{ config_root }}/secrets.local.env"
+run_windows = "Test-Path {{ config_root }}/secrets.local.env"
+
+[tasks."nginx:lint"]
+description = "Lints NGINX configuration files via gixy-next"
+dir = "{{ config_root }}"
+run = """
+#!/usr/bin/env bash
+set -o pipefail
+openssl req -x509 -newkey rsa:2048 -nodes -subj /CN=lint -keyout - -out - 2>/dev/null \
+	| docker run --rm -i \
+		-v ./configs/nginx/nginx.conf:/etc/nginx/nginx.conf:ro \
+		nginx:$NGINX_VERSION sh -c '
+      mkdir -p /etc/letsencrypt/live/n8n &&
+      tee /etc/letsencrypt/live/n8n/fullchain.pem > /etc/letsencrypt/live/n8n/privkey.pem &&
+      nginx -T' \
+	| docker run --rm -i \
+		-v ./gixy.cfg:/etc/gixy/gixy.cfg:ro \
+		megamansec/gixy-next:$GIXY_NEXT_VERSION gixy-next -
+"""
+
+[tasks."configs:lint"]
+description = "Lints through our configs"
+dir = "{{ config_root }}"
+run = [{ task = "nginx:lint" }, "yamllint --strict ."]
+
+[tasks."configs:format"]
+description = "Formats all of our configs"
+dir = "{{ config_root }}"
+run = "dprint fmt"
+
+[tasks."configs:format:check"]
+description = "Checks for unformatted changes"
+dir = "{{ config_root }}"
+run = "dprint check"
+
+[tasks."configs:check"]
+description = "Checks configs"
+
+[tasks."scripts:lint"]
+description = "Lints all bash scripts via Shellcheck"
+dir = "{{ config_root }}"
+run = """
+#!/usr/bin/env bash
+
+shopt -s globstar nullglob dotglob
+shellcheck {{ config_root }}/**/*.sh
+"""
+
+[tasks."scripts:format"]
+description = "Formats all bash scripts via shfmt"
+dir = "{{ config_root }}"
+run = "shfmt -l -w -bn -ci {{ config_root }}"
+
+[tasks."scripts:check"]
+description = "Lints and formats all bash scripts"
+run = [{ task = "scripts:lint" }, { task = "scripts:format" }]

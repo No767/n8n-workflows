@@ -1,0 +1,40 @@
+name: n8n-certs
+
+x-hardening: &hard
+  read_only: true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=32m
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  certs:
+    <<: *hard
+    container_name: n8n_certs
+    image: certbot/dns-cloudflare:v5.8.0@sha256:c45edb002b883da1a1235abb205dff474a7a1a459d878e8d5fdc7f9d83073aea
+    command: |
+      certonly --non-interactive --agree-tos --register-unsafely-without-email
+      --dns-cloudflare --dns-cloudflare-credentials=/run/secrets/cloudflare.ini
+      --cert-name=n8n --domain=n8n.pastelpink.dev
+      --keep-until-expiring
+    configs:
+      - source: cloudflareApiToken
+        target: /run/secrets/cloudflare.ini
+        mode: 0400
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+      - /var/lib/letsencrypt:rw,noexec,nosuid,size=32m
+      - /var/log/letsencrypt:rw,noexec,nosuid,size=32m
+    volumes:
+      - certs:/etc/letsencrypt
+    read_only: false
+
+configs:
+  cloudflareApiToken:
+    content: "dns_cloudflare_api_token = ${CLOUDFLARE_API_TOKEN}"
+
+volumes:
+  certs:
+    name: n8n_certs
