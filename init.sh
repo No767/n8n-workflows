@@ -20,10 +20,11 @@ abort() {
 }
 
 usage() {
-	printf 'usage: %s [--local] [--rotate] [--rotate-tokens] [--help]\n\n' "${0##*/}"
-	printf '  --local          print the values to stdout and keep them in plaintext in\n'
-	printf '                   %s instead of encrypting them. For local dev, where\n' "$LOCAL_VALUES"
-	printf '                   compose reads them with --env-file\n'
+	printf 'usage: %s [--local] [--print] [--rotate] [--rotate-tokens] [--help]\n\n' "${0##*/}"
+	printf '  --local          keep the values in plaintext in %s\n' "$LOCAL_VALUES"
+	printf '                   instead of encrypting them. For local dev, where compose\n'
+	printf '                   reads them with --env-file\n'
+	printf '  --print          with --local, also print the values to stdout\n'
 	printf '  --rotate         generate fresh values for the runner, sandbox, and SearXNG\n'
 	printf '                   keys. Recreate the containers afterwards\n'
 	printf '  --rotate-tokens  ask for the Tailscale auth key and Cloudflare API token\n'
@@ -32,12 +33,17 @@ usage() {
 }
 
 LOCAL=
+PRINT=
 ROTATE=
 ROTATE_TOKENS=
 while [[ $# -gt 0 ]]; do
 	case $1 in
 		--local)
 			LOCAL=1
+			shift
+			;;
+		--print)
+			PRINT=1
 			shift
 			;;
 		--rotate)
@@ -58,6 +64,8 @@ while [[ $# -gt 0 ]]; do
 			;;
 	esac
 done
+
+[[ -z $PRINT || -n $LOCAL ]] || abort "--print only works with --local"
 
 REQUIRED=(openssl yq)
 [[ -n $LOCAL ]] || REQUIRED+=(gum sops)
@@ -129,9 +137,9 @@ if [[ -n $LOCAL ]]; then
 		for key in "${KEYS[@]}"; do
 			KEY=$key VALUE=${SECRETS[$key]} yq -n '{strenv(KEY): strenv(VALUE)}'
 		done \
-			| yq -o props --properties-separator '=' \
-			| tee -- "$LOCAL_VALUES"
+			| yq -o props --properties-separator '=' >"$LOCAL_VALUES"
 	)
+	[[ -z $PRINT ]] || cat -- "$LOCAL_VALUES"
 
 	exit 0
 fi
