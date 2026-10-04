@@ -1,0 +1,96 @@
+name: Lint
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  Check:
+    name: Check
+    runs-on: ubuntu-24.04
+
+    env:
+      SHELLCHECK_VERSION: 0.11.0
+      YAMLLINT_VERSION: 1.38.0
+
+      NGINX_VERSION: 1.30.5-alpine-slim@sha256:1dcab0ce2a09f2f162804e5d06198736fd064d757e024d64f11d6bd57ee753f0
+      GIXY_NEXT_VERSION: 7.0.1@sha256:810fbc5ab6a88b24d7424974f258780e6ce5ee7469c20dbb2523cbe1dcd07863
+
+      SOPS_VERSION: 3.13.3
+
+      NGINXFMT_VERSION: 1.4.0
+      SHFMT_VERSION: 3.14.1
+      DPRINT_VERSION: 0.60.1
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Install tools
+        run: |
+          ARCH=$(uname -m)
+          case $ARCH in
+            aarch64) ARCH="arm64";;
+            x86_64) ARCH="amd64";;
+          esac
+
+          SOPS_ASSET="sops-v${SOPS_VERSION}.linux.${ARCH}"
+          SOPS_RELEASE="https://github.com/getsops/sops/releases/download/v${SOPS_VERSION}"
+
+          curl --proto "=https" -fsSL "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.$(uname -m).tar.gz" \
+            | tar -xz -C /tmp --strip-components=1 "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          curl --proto "=https" -fsSL "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_linux_${ARCH}" \
+            -o /tmp/shfmt
+
+          curl --proto "=https" -fsSL "${SOPS_RELEASE}/${SOPS_ASSET}" -o /tmp/sops
+          curl --proto "=https" -fsSL "${SOPS_RELEASE}/sops-v${SOPS_VERSION}.checksums.txt" \
+            | awk -v asset="$SOPS_ASSET" '$2 == asset { print $1 "  /tmp/sops" }' \
+            | sha256sum --check --strict -
+
+          uv tool install yamllint==${YAMLLINT_VERSION} \
+            && uv tool install nginxfmt==${NGINXFMT_VERSION}
+
+          sudo install -m 0755 /tmp/shellcheck /tmp/shfmt /tmp/sops /usr/local/bin/
+
+      - name: Check NGINX configs
+        run: |
+          set -o pipefail
+          openssl req -x509 -newkey rsa:2048 -nodes -subj /CN=lint -keyout - -out - 2>/dev/null \
+            | docker run --rm -i \
+              -v ./configs/nginx/nginx.conf:/etc/nginx/nginx.conf:ro \
+              "nginx:$NGINX_VERSION" sh -c '
+                mkdir -p /etc/letsencrypt/live/n8n &&
+                tee /etc/letsencrypt/live/n8n/fullchain.pem > /etc/letsencrypt/live/n8n/privkey.pem &&
+                nginx -T' \
+            | docker run --rm -i \
+              -v ./gixy.cfg:/etc/gixy/gixy.cfg:ro \
+              "megamansec/gixy-next:$GIXY_NEXT_VERSION" gixy-next -
+
+      - name: Check systemd unit sandboxing
+        run: systemd-analyze security --offline=true --threshold=2 configs/systemd/*.service
+
+      - name: Verify systemd units
+        run: systemd-analyze verify configs/systemd/*
+
+      - name: Check YAML files
+        run: yamllint --strict .
+
+      - name: Check scripts
+        run: |
+          shopt -s globstar nullglob dotglob
+          shellcheck **/*.sh
+
+      - name: Check for formatting
+        uses: dprint/check@7dc032d8874778fc024f6f9b4a7e6d896782c330 # v2.5
+        with:
+          dprint-version: ${{ env.DPRINT_VERSION }}

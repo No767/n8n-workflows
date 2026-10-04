@@ -9,7 +9,7 @@ TimeoutStartSec=15min
 WorkingDirectory=/opt/n8n-workflows
 LoadCredentialEncrypted=age.key
 Environment=SOPS_AGE_KEY_FILE=%d/age.key
-ExecStart=/usr/bin/sops exec-env secrets.sops.yml 'docker compose -f compose.certs.yml up --abort-on-container-exit'
+ExecStart=/usr/local/bin/sops exec-env secrets.sops.yml 'docker compose -f docker-compose.certs.yml up --abort-on-container-exit'
 ExecStartPost=-/usr/bin/docker kill --signal=HUP n8n_nginx
 
 DynamicUser=yes
