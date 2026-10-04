@@ -1,0 +1,44 @@
+[Unit]
+Description=Serve the n8n editor over Tailscale
+Requires=tailscaled.service
+After=tailscaled.service
+PartOf=tailscaled.service
+
+[Service]
+ExecStart=/usr/bin/tailscale serve --tcp=443 tcp://127.0.0.1:443
+Restart=on-failure
+
+User=tailscale-serve
+RemoveIPC=yes
+CapabilityBoundingSet=
+NoNewPrivileges=yes
+UMask=0077
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+PrivateUsers=yes
+PrivateTmp=yes
+PrivateDevices=yes
+DevicePolicy=closed
+ProtectSystem=strict
+ProtectHome=yes
+ProtectProc=invisible
+ProcSubset=pid
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target

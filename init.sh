@@ -20,18 +20,32 @@ abort() {
 }
 
 usage() {
-	printf 'usage: %s [--local] [--help]\n\n' "${0##*/}"
-	printf '  --local  print the values to stdout and keep them in plaintext in\n'
-	printf '           %s instead of encrypting them. For local dev, where\n' "$LOCAL_VALUES"
-	printf '           compose reads them with --env-file\n'
-	printf '  --help   show this help\n'
+	printf 'usage: %s [--local] [--rotate] [--rotate-tokens] [--help]\n\n' "${0##*/}"
+	printf '  --local          print the values to stdout and keep them in plaintext in\n'
+	printf '                   %s instead of encrypting them. For local dev, where\n' "$LOCAL_VALUES"
+	printf '                   compose reads them with --env-file\n'
+	printf '  --rotate         generate fresh values for the runner, sandbox, and SearXNG\n'
+	printf '                   keys. Recreate the containers afterwards\n'
+	printf '  --rotate-tokens  ask for the Tailscale auth key and Cloudflare API token\n'
+	printf '                   again. Press enter to keep the current one\n'
+	printf '  --help           show this help\n'
 }
 
 LOCAL=
+ROTATE=
+ROTATE_TOKENS=
 while [[ $# -gt 0 ]]; do
 	case $1 in
 		--local)
 			LOCAL=1
+			shift
+			;;
+		--rotate)
+			ROTATE=1
+			shift
+			;;
+		--rotate-tokens)
+			ROTATE_TOKENS=1
 			shift
 			;;
 		--help)
@@ -47,6 +61,7 @@ done
 
 REQUIRED=(openssl yq)
 [[ -n $LOCAL ]] || REQUIRED+=(gum sops)
+[[ -z $ROTATE_TOKENS ]] || REQUIRED+=(gum)
 
 for cmd in "${REQUIRED[@]}"; do
 	command -v "$cmd" >/dev/null || abort "$cmd is required"
@@ -67,6 +82,13 @@ if [[ -v KEPT ]]; then
 	((${#EXISTING[@]})) || abort "could not read the values already in ${KEPT[-1]}"
 fi
 
+[[ -z $ROTATE ]] || unset \
+	'EXISTING[N8N_RUNNERS_AUTH_TOKEN]' \
+	'EXISTING[SANDBOX_API_KEY]' \
+	'EXISTING[SANDBOX_REGISTRATION_TOKEN]' \
+	'EXISTING[SANDBOX_RUNNER_API_KEY]' \
+	'EXISTING[SEARXNG_SECRET]'
+
 KEYS=()
 declare -A SECRETS=()
 put() {
@@ -83,9 +105,9 @@ generate() {
 
 ask() {
 	local key=$1 prompt=$2 default=${3:-}
-	local value=${EXISTING[$key]:-${LOCAL:+$default}}
-	[[ -n $value ]] || value=$(gum input --password --no-show-help --prompt "$prompt: " </dev/tty)
-	put "$key" "$value"
+	local value=${EXISTING[$key]:-${LOCAL:+$default}} input=
+	[[ -n $value && -z $ROTATE_TOKENS ]] || input=$(gum input --password --no-show-help --prompt "$prompt: " </dev/tty)
+	put "$key" "${input:-$value}"
 }
 
 generate N8N_ENCRYPTION_KEY 32

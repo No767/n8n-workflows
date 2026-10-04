@@ -21,6 +21,7 @@ jobs:
       GIXY_NEXT_VERSION: 7.0.1@sha256:810fbc5ab6a88b24d7424974f258780e6ce5ee7469c20dbb2523cbe1dcd07863
 
       SOPS_VERSION: 3.13.3
+      TAILSCALE_VERSION: 1.102.4
 
       NGINXFMT_VERSION: 1.4.0
       SHFMT_VERSION: 3.14.1
@@ -46,6 +47,8 @@ jobs:
 
           SOPS_ASSET="sops-v${SOPS_VERSION}.linux.${ARCH}"
           SOPS_RELEASE="https://github.com/getsops/sops/releases/download/v${SOPS_VERSION}"
+          TAILSCALE_ASSET="tailscale_${TAILSCALE_VERSION}_${ARCH}"
+          TAILSCALE_RELEASE="https://pkgs.tailscale.com/stable"
 
           curl --proto "=https" -fsSL "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.$(uname -m).tar.gz" \
             | tar -xz -C /tmp --strip-components=1 "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
@@ -57,10 +60,22 @@ jobs:
             | awk -v asset="$SOPS_ASSET" '$2 == asset { print $1 "  /tmp/sops" }' \
             | sha256sum --check --strict -
 
+          curl --proto "=https" -fsSL "${TAILSCALE_RELEASE}/${TAILSCALE_ASSET}.tgz" -o "/tmp/${TAILSCALE_ASSET}.tgz"
+          curl --proto "=https" -fsSL "${TAILSCALE_RELEASE}/${TAILSCALE_ASSET}.tgz.sha256" \
+            | awk -v asset="/tmp/${TAILSCALE_ASSET}.tgz" '{ print $1 "  " asset }' \
+            | sha256sum --check --strict -
+          tar -xzf "/tmp/${TAILSCALE_ASSET}.tgz" -C /tmp --strip-components=1 \
+            "${TAILSCALE_ASSET}/tailscale" "${TAILSCALE_ASSET}/tailscaled" "${TAILSCALE_ASSET}/systemd/tailscaled.service"
+
           uv tool install yamllint==${YAMLLINT_VERSION} \
             && uv tool install nginxfmt==${NGINXFMT_VERSION}
 
           sudo install -m 0755 /tmp/shellcheck /tmp/shfmt /tmp/sops /usr/local/bin/
+          sudo install -m 0755 /tmp/tailscale /usr/bin/
+          sudo install -m 0755 /tmp/tailscaled /usr/sbin/
+
+      - name: Link tailscale daemon unit
+        run: sudo systemctl link /tmp/systemd/tailscaled.service
 
       - name: Check NGINX configs
         run: |
