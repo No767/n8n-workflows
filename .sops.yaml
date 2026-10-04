@@ -1,10 +1,8 @@
-# Public age recipients only. Committed.
-#   operator: your personal key (passphrase-protected); runs `./init.sh`
-#   prod:     a passphrase-less deploy key, stored encrypted on the prod host with
-#             systemd-creds; n8n-certs.service loads it (DESIGN.md)
-# After adding a recipient, run: sops updatekeys secrets.sops.yml
+keys:
+  - &noelle age1gfw0l0jf8m4j2fmpwldqm6ckxvvlwmvy8t3563yh3xc8rscp4ssszmykyf
+
 creation_rules:
-  - path_regex: (^|/)secrets\.sops\.yml$
-    age: >-
-      age1TODO_OPERATOR_PUBLIC_KEY,
-      age1TODO_PROD_DEPLOY_PUBLIC_KEY
+  - path_regex: '\.sops\.yml$'
+    key_groups:
+      - age:
+          - *noelle
