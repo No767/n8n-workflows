@@ -206,10 +206,12 @@ services:
       POSTGRES_INITDB_ARGS: --data-checksums
 
       N8N_PASSWORD_FILE: /run/secrets/n8nDbPassword
+      BORGMATIC_PASSWORD_FILE: /run/secrets/borgmaticDbPassword
       POSTGRES_PASSWORD_FILE: /run/secrets/postgresPassword
     secrets:
       - postgresPassword
       - n8nDbPassword
+      - borgmaticDbPassword
     command: postgres -c hba_file=/etc/postgresql/pg_hba.conf
     networks:
       - db-bridge
@@ -295,6 +297,8 @@ secrets:
     environment: POSTGRES_PASSWORD
   n8nDbPassword:
     environment: N8N_DB_PASSWORD
+  borgmaticDbPassword:
+    environment: BORGMATIC_DB_PASSWORD
   runnersAuthToken:
     environment: N8N_RUNNERS_AUTH_TOKEN
   sandboxApiKey:

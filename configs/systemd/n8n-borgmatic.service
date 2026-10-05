@@ -1,0 +1,44 @@
+[Unit]
+Description=Back up the n8n database with borgmatic
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+TimeoutStartSec=1h
+WorkingDirectory=/opt/n8n-workflows
+LoadCredentialEncrypted=age.key
+Environment=SOPS_AGE_KEY_FILE=%d/age.key
+ExecStart=/usr/local/bin/sops exec-env secrets.sops.yml 'docker compose -f docker-compose.borgmatic.yml up --exit-code-from borgmatic'
+
+DynamicUser=yes
+SupplementaryGroups=docker
+CapabilityBoundingSet=
+NoNewPrivileges=yes
+UMask=0077
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+PrivateUsers=yes
+PrivateTmp=yes
+PrivateDevices=yes
+DevicePolicy=closed
+ProtectSystem=strict
+ProtectHome=yes
+ProtectProc=invisible
+ProcSubset=pid
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM

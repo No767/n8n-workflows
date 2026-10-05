@@ -1,0 +1,65 @@
+name: n8n-borgmatic
+
+x-hardening: &hard
+  read_only: true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=32m
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  borgmatic:
+    <<: *hard
+    container_name: n8n_borgmatic
+    image: ghcr.io/borgmatic-collective/borgmatic:2.1.9@sha256:09e416d967ee7026baba83a1a7276572ec98d13057218e506b3c6de94c547027
+    entrypoint: borgmatic
+    environment:
+      BORG_REPO: ${BORG_REPO}
+      HEALTHCHECKS_URL: ${HEALTHCHECKS_URL}
+
+      TZ: America/Los_Angeles
+    secrets:
+      - borgPassphrase
+      - borgmaticDbPassword
+      - n8nDbPassword
+      - source: borgSshKey
+        mode: 0400
+    configs:
+      - source: borgKnownHosts
+        target: /root/.ssh/known_hosts
+    networks:
+      - default
+      - db-bridge
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+      - /root/.cache/borg:rw,noexec,nosuid,size=32m
+    volumes:
+      - ./configs/borgmatic/config.yaml:/etc/borgmatic.d/config.yaml:ro
+      - borg-config:/root/.config/borg
+      - borgmatic-state:/root/.local/state/borgmatic
+    read_only: false
+
+secrets:
+  borgPassphrase:
+    environment: BORG_PASSPHRASE
+  borgmaticDbPassword:
+    environment: BORGMATIC_DB_PASSWORD
+  borgSshKey:
+    environment: BORG_SSH_KEY
+  n8nDbPassword:
+    environment: N8N_DB_PASSWORD
+
+configs:
+  borgKnownHosts:
+    content: ${BORG_KNOWN_HOSTS}
+
+volumes:
+  borg-config:
+  borgmatic-state:
+
+networks:
+  db-bridge:
+    name: n8n_db-bridge
+    external: true

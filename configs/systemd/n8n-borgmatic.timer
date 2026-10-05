@@ -1,0 +1,10 @@
+[Unit]
+Description=Back up the n8n database with borgmatic
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

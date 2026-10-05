@@ -27,8 +27,9 @@ usage() {
 	printf '  --print          with --local, also print the values to stdout\n'
 	printf '  --rotate         generate fresh values for the runner, sandbox, and SearXNG\n'
 	printf '                   keys. Recreate the containers afterwards\n'
-	printf '  --rotate-tokens  ask for the Tailscale auth key and Cloudflare API token\n'
-	printf '                   again. Press enter to keep the current one\n'
+	printf '  --rotate-tokens  ask for the Tailscale auth key, Cloudflare API token,\n'
+	printf '                   BorgBase repository URL and host key, and Healthchecks\n'
+	printf '                   ping URL again. Press enter to keep the current one\n'
 	printf '  --help           show this help\n'
 }
 
@@ -76,7 +77,7 @@ for cmd in "${REQUIRED[@]}"; do
 done
 
 if [[ -n $LOCAL ]]; then
-	[[ -f $LOCAL_VALUES ]] && KEPT=(yq -p props -o yaml -- "$LOCAL_VALUES")
+	[[ -f $LOCAL_VALUES ]] && KEPT=(yq -p props -o yaml '.[] |= sub("^\"|\"$"; "")' -- "$LOCAL_VALUES")
 elif [[ -f $ENCRYPTED ]]; then
 	log "reading the values already in $ENCRYPTED"
 	KEPT=(sops --decrypt "$ENCRYPTED")
@@ -121,6 +122,7 @@ ask() {
 generate N8N_ENCRYPTION_KEY 32
 generate POSTGRES_PASSWORD 32
 generate N8N_DB_PASSWORD 32
+generate BORGMATIC_DB_PASSWORD 32
 generate N8N_RUNNERS_AUTH_TOKEN 32
 
 generate SANDBOX_API_KEY 24
@@ -128,14 +130,20 @@ generate SANDBOX_REGISTRATION_TOKEN 24
 generate SANDBOX_RUNNER_API_KEY 24
 generate SEARXNG_SECRET 24
 
+generate BORG_PASSPHRASE 32
+put BORG_SSH_KEY "${EXISTING[BORG_SSH_KEY]:-$(openssl genpkey -algorithm ed25519)}"
+
 ask TS_AUTHKEY 'Tailscale Auth Key' local-tailscale-auth-key
 ask CLOUDFLARE_API_TOKEN 'Cloudflare API Token' local-cloudflare-api-token
+ask BORG_REPO 'BorgBase Repository URL' local-borg-repo
+ask BORG_KNOWN_HOSTS 'BorgBase Host Key' local-borg-known-hosts
+ask HEALTHCHECKS_URL 'Healthchecks Ping URL' local-healthchecks-url
 
 if [[ -n $LOCAL ]]; then
 	(
 		umask 077
 		for key in "${KEYS[@]}"; do
-			KEY=$key VALUE=${SECRETS[$key]} yq -n '{strenv(KEY): strenv(VALUE)}'
+			KEY=$key VALUE=${SECRETS[$key]} yq -n '{strenv(KEY): "\"" + strenv(VALUE) + "\""}'
 		done \
 			| yq -o props --properties-separator '=' >"$LOCAL_VALUES"
 	)

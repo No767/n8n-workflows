@@ -20,18 +20,21 @@ resolve_secret() {
 }
 
 resolve_secret N8N_PASSWORD
+resolve_secret BORGMATIC_PASSWORD
 
 ### Roles and databases
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres <<-EOSQL
 	CREATE ROLE n8n LOGIN PASSWORD '${N8N_PASSWORD:?}' CONNECTION LIMIT 15;
 	CREATE ROLE postgres_monitor LOGIN CONNECTION LIMIT 5;
+	CREATE ROLE borgmatic LOGIN PASSWORD '${BORGMATIC_PASSWORD:?}' CONNECTION LIMIT 5 IN ROLE pg_read_all_data;
 
 	ALTER DATABASE n8n OWNER TO n8n;
 	REVOKE ALL ON DATABASE n8n, postgres, template1 FROM public;
 
 	GRANT CONNECT ON DATABASE n8n TO n8n;
 	GRANT CONNECT ON DATABASE postgres TO postgres_monitor;
+	GRANT CONNECT ON DATABASE n8n TO borgmatic;
 EOSQL
 
 ### Database hardening
