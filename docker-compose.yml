@@ -230,7 +230,7 @@ services:
   nginx:
     <<: *hard
     container_name: n8n_nginx
-    image: nginx:1.31.6@sha256:908dc23e643a1447dbfb2e189ed268bfde6a51a5bf9a34d3dd3440a24f58ccf7
+    image: nginx:1.30.5@sha256:b972f831f200b19ef0767938224f9711e74cd783718738cd7405d5cabf75c442
     ports:
       - 127.0.0.1:443:443
     cap_add:
