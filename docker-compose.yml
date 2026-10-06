@@ -176,7 +176,7 @@ services:
   searxng:
     <<: *hard
     container_name: n8n_searxng
-    image: ghcr.io/searxng/searxng@sha256:eb2a404db174d33a04cd9f2e519bcae2ca722a58923510652cc1314be94e8e63
+    image: ghcr.io/searxng/searxng:2026.10.4-d48c4b555@sha256:76b0bf285aca014c7191fc4d9234c4bfb358624ac33d8883833d496c059ec072
     user: 977:977
     environment:
       SEARXNG_SECRET: ${SEARXNG_SECRET}
