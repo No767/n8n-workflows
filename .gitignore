@@ -6,3 +6,5 @@ keys.txt
 
 # Audits for agentic workflows
 .audits
+
+/configs/cloud-init/config
