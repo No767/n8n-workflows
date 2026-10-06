@@ -1,8 +1,10 @@
 keys:
   - &noelle age1gfw0l0jf8m4j2fmpwldqm6ckxvvlwmvy8t3563yh3xc8rscp4ssszmykyf
+  - &prod age1et70gg2dhnlkdvdw32h5z3jd3zxx8utzudt8cj43pupq9r2hz34swuf98t
 
 creation_rules:
   - path_regex: '\.sops\.yml$'
     key_groups:
       - age:
           - *noelle
+          - *prod
