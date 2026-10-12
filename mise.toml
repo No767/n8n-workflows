@@ -1,6 +1,6 @@
 [tools]
-python = "3.14.8"
-uv = "0.12.23"
+python = "3.15.0"
+uv = "0.13.0"
 
 jq = "1.8.2"
 yq = "4.54.1"
@@ -12,7 +12,7 @@ yamllint = "1.38.0"
 
 "pypi:nginxfmt" = "1.4.0"
 shfmt = "3.14.1"
-dprint = "0.60.1"
+dprint = "0.63.0"
 
 # Encryption
 sops = "3.13.3"
