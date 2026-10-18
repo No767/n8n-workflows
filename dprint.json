@@ -59,7 +59,9 @@
     }]
   },
   "excludes": [
-    "**/*.sops.{yaml,yml}"
+    "**/*.sops.{yaml,yml}",
+    "**/pnpm-lock.yaml",
+    "workflows/dist/canvas.sops.json"
   ],
   "plugins": [
     "npm:@dprint/markdown@0.25.0",
