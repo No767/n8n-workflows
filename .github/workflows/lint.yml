@@ -89,7 +89,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm ci --frozen-lockfile --ignore-scripts
 
       - name: Check NGINX configs
         run: |

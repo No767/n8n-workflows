@@ -1,4 +1,4 @@
 .sops.yaml
 secrets.sops.yml
 workflows/canvas.sops.yml
-workflows/pnpm-lock.yaml
+**/pnpm-lock.yaml
