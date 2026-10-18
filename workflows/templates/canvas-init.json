@@ -1,0 +1,173 @@
+{
+  "id": "@config n8n.workflows.init",
+  "name": "Canvas Init",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "init-1",
+      "name": "Run once",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "parameters": {}
+    },
+    {
+      "id": "init-8",
+      "name": "On publish",
+      "type": "n8n-nodes-base.n8nTrigger",
+      "typeVersion": 1,
+      "position": [0, 200],
+      "parameters": { "events": ["activate", "update"] },
+      "notes": "Publishing from the CLI arrives as update, from the UI as activate."
+    },
+    {
+      "id": "init-2",
+      "name": "Create canvas_ledger",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [220, 0],
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "canvas_ledger",
+        "columns": {
+          "column": [
+            { "name": "canvas_key", "type": "string" },
+            { "name": "course_id", "type": "number" },
+            { "name": "assignment_id", "type": "number" },
+            { "name": "title", "type": "string" },
+            { "name": "lifecycle", "type": "string" },
+            { "name": "section", "type": "string" },
+            { "name": "item_fp", "type": "string" },
+            { "name": "asana_state", "type": "string" },
+            { "name": "asana_gid", "type": "string" },
+            { "name": "asana_written", "type": "string" },
+            { "name": "gcal_state", "type": "string" },
+            { "name": "gcal_written", "type": "string" },
+            { "name": "ntfy", "type": "string" },
+            { "name": "wake_at", "type": "date" },
+            { "name": "gone_since", "type": "date" },
+            { "name": "retry_count", "type": "number" },
+            { "name": "last_error", "type": "string" }
+          ]
+        },
+        "options": { "createIfNotExists": true }
+      }
+    },
+    {
+      "id": "init-3",
+      "name": "canvas_ledger missing columns?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [440, 0],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Create canvas_ledger').params.columns.column.filter(column => !$json.columns.some(existing => existing.name === column.name && existing.type === column.type)).map(column => column.name) }}",
+              "rightValue": "",
+              "operator": { "type": "array", "operation": "notEmpty", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "init-4",
+      "name": "canvas_ledger is missing columns",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [660, -100],
+      "parameters": {
+        "errorMessage": "=canvas_ledger is missing columns: {{ $('Create canvas_ledger').params.columns.column.filter(column => !$json.columns.some(existing => existing.name === column.name && existing.type === column.type)).map(column => column.name).join(', ') }}"
+      }
+    },
+    {
+      "id": "init-5",
+      "name": "Create canvas_meta",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [660, 100],
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "canvas_meta",
+        "columns": {
+          "column": [
+            { "name": "key", "type": "string" },
+            { "name": "value", "type": "string" },
+            { "name": "owner", "type": "string" },
+            { "name": "until", "type": "date" }
+          ]
+        },
+        "options": { "createIfNotExists": true }
+      }
+    },
+    {
+      "id": "init-6",
+      "name": "canvas_meta missing columns?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [880, 100],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Create canvas_meta').params.columns.column.filter(column => !$json.columns.some(existing => existing.name === column.name && existing.type === column.type)).map(column => column.name) }}",
+              "rightValue": "",
+              "operator": { "type": "array", "operation": "notEmpty", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "init-7",
+      "name": "canvas_meta is missing columns",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [1100, 0],
+      "parameters": {
+        "errorMessage": "=canvas_meta is missing columns: {{ $('Create canvas_meta').params.columns.column.filter(column => !$json.columns.some(existing => existing.name === column.name && existing.type === column.type)).map(column => column.name).join(', ') }}"
+      }
+    }
+  ],
+  "connections": {
+    "Run once": {
+      "main": [[{ "node": "Create canvas_ledger", "type": "main", "index": 0 }]]
+    },
+    "On publish": {
+      "main": [[{ "node": "Create canvas_ledger", "type": "main", "index": 0 }]]
+    },
+    "Create canvas_ledger": {
+      "main": [[{ "node": "canvas_ledger missing columns?", "type": "main", "index": 0 }]]
+    },
+    "canvas_ledger missing columns?": {
+      "main": [
+        [{ "node": "canvas_ledger is missing columns", "type": "main", "index": 0 }],
+        [{ "node": "Create canvas_meta", "type": "main", "index": 0 }]
+      ]
+    },
+    "Create canvas_meta": {
+      "main": [[{ "node": "canvas_meta missing columns?", "type": "main", "index": 0 }]]
+    },
+    "canvas_meta missing columns?": {
+      "main": [[{ "node": "canvas_meta is missing columns", "type": "main", "index": 0 }], []]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "errorWorkflow": "@config n8n.workflows.alert",
+    "timezone": "America/Los_Angeles",
+    "availableInMCP": true
+  },
+  "pinData": {}
+}

@@ -1,0 +1,22 @@
+max_actions_per_destination: 30
+lease_minutes: 80
+canvas_min_remaining: 300
+ignore_items:
+  - 579857
+  - 574972
+  - 574976
+  - 574977
+  - 574978
+
+asana:
+  start_dates: false
+
+ntfy:
+  enabled: false
+
+n8n:
+  workflows:
+    check: CanvasCheckWf001
+    sync: CanvasSyncWf0001
+    alert: CanvasAlertWf001
+    init: CanvasInitWf0001

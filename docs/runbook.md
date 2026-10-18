@@ -10,6 +10,7 @@ You need these on the server:
 - Docker Engine with the compose plugin.
 - Sysbox, which registers the `sysbox-runc` runtime with Docker.
 - `sops` at `/usr/local/bin/sops`, plus `age`, `jq`, and `git`.
+- `yq` v4 from https://github.com/mikefarah/yq at `/usr/local/bin/yq`. Debian's `yq` package is a different tool and doesn't work.
 
 You also need:
 
@@ -202,6 +203,163 @@ Do these steps once, after the stack is up.
 
    The command returns when the backup finishes. The check in Healthchecks turns green.
 
+## Deploy the Canvas workflows
+
+The Canvas workflows are Canvas Check, Canvas Sync, Canvas Alert, and Canvas Init. `workflows/build.sh` builds them into `workflows/dist/canvas.sops.json`. `run.sh --import` loads that file into n8n and publishes the workflows.
+
+Before you start:
+
+- The stack is up and the n8n owner account exists. See [Check that it works](#check-that-it-works).
+- On your machine, run `aube install` in `workflows/`.
+
+### Values for canvas.sops.yml
+
+`workflows/init.sh` asks for these values and saves them in `workflows/canvas.sops.yml`.
+
+| Prompt                                | Enter                                                                                                                        |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **Asana Project ID**                  | The number after `/project/` in the Asana project's URL.                                                                     |
+| **Asana Missed Section ID**           | The gid of the project's section for missed assignments. See [Find Asana gids](#find-asana-gids).                            |
+| **Google Calendar ID**                | In Google Calendar, open **Settings**, click the calendar, then copy **Calendar ID** under **Integrate calendar**.           |
+| **n8n Canvas Credential ID**          | The id of the **Header Auth** credential. Its **Name** is `Authorization` and its **Value** is `Bearer <Canvas token>`.      |
+| **n8n Asana Credential ID**           | The id of the **Asana OAuth2 API** credential.                                                                               |
+| **n8n Google Calendar Credential ID** | The id of the **Google Calendar OAuth2 API** credential.                                                                     |
+| **n8n ntfy Credential ID**            | The id of the **Custom Auth** credential for ntfy. Leave it empty while `ntfy.enabled` is `false` in `workflows/canvas.yml`. |
+| **n8n canvas_ledger Table ID**        | The id of the `canvas_ledger` data table. Leave it empty until `run.sh --init` creates the table.                            |
+| **n8n canvas_meta Table ID**          | The id of the `canvas_meta` data table. Leave it empty until `run.sh --init` creates the table.                              |
+
+To find an n8n id, open the credential or the data table in the server's n8n at https://n8n.pastelpink.dev. The id is the last part of the URL, after `/credentials/` or `/datatables/`. Data tables are under **Overview > Data tables**.
+
+`workflows/init.sh` doesn't ask for the Canvas URL or the courses. Set them with `sops edit workflows/canvas.sops.yml`:
+
+```yaml
+canvas:
+  base_url: https://<school>.instructure.com
+courses:
+  - id: 39187
+    label: PHYS 008
+    section: "<section gid>"
+    tag: "<tag gid>"
+    match:
+      pattern: In Lecture Questions
+      section: "<section gid>"
+```
+
+- `base_url`: the Canvas address, with no trailing `/`.
+- `id`: the number after `/courses/` in the course's Canvas URL.
+- `label`: the text in front of each Calendar event and ntfy reminder title.
+- `section`: the gid of the Asana section for the course's assignments.
+- `tag`: the gid of the Asana tag for the course. The tag must already exist.
+- `match`: optional. Assignments whose name matches `match.pattern` go to `match.section` instead of `section`.
+- `match.pattern`: a regular expression for the assignment name. It ignores case.
+- `match.section`: the gid of the Asana section for the assignments that match. It's a different section from `section`.
+
+### Find Asana gids
+
+1. Create an Asana personal access token in the [Asana developer console](https://app.asana.com/0/my-apps).
+
+2. On your machine, read the token into the shell. Paste it and press enter. It doesn't echo.
+
+   ```sh
+   read -rs ASANA_TOKEN
+   ```
+
+3. List the project's sections. Replace `<project gid>` with the number after `/project/` in the project's URL.
+
+   ```sh
+   curl -fsS --oauth2-bearer "$ASANA_TOKEN" 'https://app.asana.com/api/1.0/projects/<project gid>/sections?limit=100' \
+   	| jq -r '.data[] | "\(.gid)  \(.name)"'
+   ```
+
+4. List the workspace's tags. Replace `<workspace gid>` with the number after `/1/` in the project's URL.
+
+   ```sh
+   curl -fsS --oauth2-bearer "$ASANA_TOKEN" 'https://app.asana.com/api/1.0/workspaces/<workspace gid>/tags?limit=100' \
+   	| jq -r '.data[] | "\(.gid)  \(.name)"'
+   ```
+
+5. Clear the token with `unset ASANA_TOKEN`.
+
+6. Put each gid in `workflows/canvas.sops.yml`. Each line of the output from steps 3 and 4 is a gid, then a name. Find the line with the name of the Asana section or tag, then copy the gid at the start of that line.
+
+   | Copy the gid of                                                           | Output | Key                       | Set with                                           |
+   | ------------------------------------------------------------------------- | ------ | ------------------------- | -------------------------------------------------- |
+   | The Asana section for missed assignments                                  | Step 3 | `asana.missed_section`    | **Asana Missed Section ID** in `workflows/init.sh` |
+   | The Asana section for the course's assignments                            | Step 3 | `courses[].section`       | `sops edit workflows/canvas.sops.yml`              |
+   | The Asana tag for the course                                              | Step 4 | `courses[].tag`           | `sops edit workflows/canvas.sops.yml`              |
+   | The Asana section for the course's assignments that match `match.pattern` | Step 3 | `courses[].match.section` | `sops edit workflows/canvas.sops.yml`              |
+
+   For example, if step 3 prints `1219348633798299  PHYS 008`, set `section: "1219348633798299"` on the PHYS 008 course.
+
+   `match.section` is also an Asana section gid from step 3. For example, if step 3 prints `1219348633798302  In Lecture Questions`, set `match.section: "1219348633798302"` on the PHYS 008 course.
+
+### Deploy for the first time
+
+1. In the server's n8n at https://n8n.pastelpink.dev, create the credentials listed in [Values for canvas.sops.yml](#values-for-canvassopsyml).
+
+2. On your machine, set the Canvas URL and the courses:
+
+   ```sh
+   sops edit workflows/canvas.sops.yml
+   ```
+
+3. On your machine, run `workflows/init.sh`. Leave both table ids empty.
+
+4. On the server, create the data tables:
+
+   ```sh
+   git -C /opt/n8n-workflows pull
+   sudo /opt/n8n-workflows/run.sh --init
+   ```
+
+5. In the server's n8n at https://n8n.pastelpink.dev, open Canvas Init's executions and check that the latest run succeeded. **Overview > Data tables** lists `canvas_ledger` and `canvas_meta`.
+
+6. On your machine, run `workflows/init.sh` again. It asks only for the two table ids.
+
+7. On your machine, build the workflows:
+
+   ```sh
+   workflows/build.sh
+   ```
+
+   The last line is `==> wrote .../workflows/dist/canvas.sops.json`.
+
+8. Commit and push `workflows/canvas.sops.yml` and `workflows/dist/canvas.sops.json`.
+
+9. On the server, import the workflows:
+
+   ```sh
+   git -C /opt/n8n-workflows pull
+   sudo /opt/n8n-workflows/run.sh --import
+   ```
+
+   The last line is `==> published, n8n picks them up within about 10 s`.
+
+10. In the server's n8n at https://n8n.pastelpink.dev, check that the four Canvas workflows are published. Canvas Check runs every minute. Its first run shows up in its executions within a minute.
+
+### Deploy changed workflows
+
+Do this after you change anything in `workflows/`, or the ntfy values in `secrets.sops.yml`.
+
+1. On your machine, run `workflows/build.sh`.
+
+2. Commit and push your changes and `workflows/dist/canvas.sops.json`.
+
+3. On the server, import the workflows:
+
+   ```sh
+   git -C /opt/n8n-workflows pull
+   sudo /opt/n8n-workflows/run.sh --import
+   ```
+
+### Change an id
+
+1. On your machine, run `workflows/init.sh --ask-all`. It asks for every value in [Values for canvas.sops.yml](#values-for-canvassopsyml). Press enter at a prompt to keep the current value.
+
+2. Do [Deploy changed workflows](#deploy-changed-workflows).
+
+If you reconnect or edit a credential in n8n and its id stays the same, you don't need to deploy.
+
 ## Everyday tasks
 
 ### Update
@@ -309,3 +467,10 @@ Keep `secrets.sops.yml`, the exported repository key, and your own age key somew
 | `Failed to create/acquire the lock`                                       | If `systemctl is-active n8n-borgmatic.service` prints `inactive` or `failed`, run `borgmatic break-lock`.                             |
 | `pg_hba.conf rejects connection for host ..., user "borgmatic"`           | Run `run.sh`.                                                                                                                         |
 | `pg_dump: error: ... password authentication failed for user "borgmatic"` | Do step 2 of [Set up backups](#set-up-backups).                                                                                       |
+| `error: yq is required`                                                   | Install `yq` v4. See [Before you start](#before-you-start).                                                                           |
+| `error: ... canvas.sops.json not found, run workflows/build.sh first`     | Do steps 1 and 2 of [Deploy changed workflows](#deploy-changed-workflows), then pull on the server.                                   |
+| `error: the config is missing <values>`                                   | Fill in the listed values. See [Values for canvas.sops.yml](#values-for-canvassopsyml).                                               |
+| `error: tsc not found, run aube install first`                            | Run `aube install` in `workflows/`.                                                                                                   |
+| sops can't decrypt `canvas.sops.json` on the server                       | Check that `.sops.yaml` lists the server's key for `\.sops\.json$`, then rebuild.                                                     |
+| Canvas Init fails with `... is missing columns: ...`                      | Add the listed columns in **Overview > Data tables**. Then run Canvas Init with **Execute workflow**.                                 |
+| A Canvas workflow fails with a credential or data table error             | Check the ids in [Values for canvas.sops.yml](#values-for-canvassopsyml), then do [Change an id](#change-an-id).                      |

@@ -15,6 +15,39 @@
   "json": {
     "lineWidth": 120
   },
+  "oxc": {
+    "associations": ["!**/*", "**/*.ts"],
+    "javascript.enabled": false,
+    "json.enabled": false,
+    "jsonc.enabled": false,
+    "json5.enabled": false,
+    "graphql.enabled": false,
+    "css.enabled": false,
+    "scss.enabled": false,
+    "less.enabled": false,
+    "yaml.enabled": false,
+    "markdown.enabled": false,
+    "toml.enabled": false,
+    "lineWidth": 100,
+    "indentWidth": 2,
+    "indentStyle": "space",
+    "sortImports": {
+      "newlinesBetween": true,
+      "customGroups": [
+        {
+          "groupName": "alias-imports",
+          "elementNamePattern": ["@/**"]
+        }
+      ],
+      "groups": [
+        ["parent", "sibling", "index", "side_effect"],
+        "builtin",
+        ["external", "type-external"],
+        ["alias-imports", "internal", "type-internal"],
+        "unknown"
+      ]
+    }
+  },
   "exec": {
     "cwd": "${configDir}",
     "commands": [{
@@ -33,6 +66,7 @@
     "npm:dprint-plugin-yaml@0.6.0",
     "npm:@dprint/json@0.25.1",
     "npm:@dprint/toml@0.8.0",
-    "npm:@dprint/exec@0.7.3/plugin.json@704701df449dd7e942a71144773778ac529d68c2e4657bfc236d393b898b9a67"
+    "npm:@dprint/exec@0.7.3/plugin.json@704701df449dd7e942a71144773778ac529d68c2e4657bfc236d393b898b9a67",
+    "npm:@dprint/oxc@0.46.0"
   ]
 }

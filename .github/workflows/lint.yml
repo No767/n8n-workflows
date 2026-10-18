@@ -31,6 +31,16 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: lts/*
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: latest
+
       - name: Install uv
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
@@ -77,6 +87,10 @@ jobs:
       - name: Link tailscale daemon unit
         run: sudo systemctl link /tmp/systemd/tailscaled.service
 
+      - name: Install dependencies
+        run: |
+          pnpm install --frozen-lockfile --ignore-scripts
+
       - name: Check NGINX configs
         run: |
           set -o pipefail
@@ -104,6 +118,10 @@ jobs:
         run: |
           shopt -s globstar nullglob dotglob
           shellcheck **/*.sh
+
+      - name: Check Typescript codebase via Oxlint
+        run: |
+          pnpm exec oxlint --type-check --type-aware --deny-warnings src
 
       - name: Check for formatting
         uses: dprint/check@7dc032d8874778fc024f6f9b4a7e6d896782c330 # v2.5

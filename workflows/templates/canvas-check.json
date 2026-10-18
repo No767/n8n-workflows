@@ -1,0 +1,881 @@
+{
+  "id": "@config n8n.workflows.check",
+  "name": "Canvas Check",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "check-1",
+      "name": "Run now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "parameters": {}
+    },
+    {
+      "id": "check-2",
+      "name": "Every minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 200],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "disabled": true,
+      "notes": "Off while the sync runs by hand. Enable it and publish the workflow to poll every minute."
+    },
+    {
+      "id": "check-3",
+      "name": "Read meta",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [220, 100],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@config n8n.data_tables.meta",
+          "cachedResultName": "canvas_meta"
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "check-4",
+      "name": "Read ledger",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [440, 100],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@config n8n.data_tables.ledger",
+          "cachedResultName": "canvas_ledger"
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "id": "check-5",
+      "name": "Start",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 100],
+      "parameters": {
+        "jsCode": "@code start"
+      }
+    },
+    {
+      "id": "check-6",
+      "name": "Canvas planner",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [880, 100],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Start').first().json.urls.planner }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000,
+          "pagination": {
+            "pagination": {
+              "paginationMode": "responseContainsNextURL",
+              "nextURL": "={{ ((($response.headers.link || '').split(',').find(s => s.includes('rel=\"next\"'))) || '').replace(/.*<([^>]+)>.*/, '$1').trim() }}",
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !(($response.headers.link || '').includes('rel=\"next\"')) }}",
+              "limitPagesFetched": true,
+              "maxRequests": 10
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "@config n8n.credentials.canvas",
+          "name": "Canvas token"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "executeOnce": true
+    },
+    {
+      "id": "check-7",
+      "name": "Asana events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [1100, 100],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Start').first().json.urls.asanaEvents }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "asanaOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "asanaOAuth2Api": {
+          "id": "@config n8n.credentials.asana",
+          "name": "Asana account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "executeOnce": true
+    },
+    {
+      "id": "check-8",
+      "name": "Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 100],
+      "parameters": {
+        "jsCode": "@code gate"
+      }
+    },
+    {
+      "id": "check-9",
+      "name": "Full read?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1540, 100],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.courseId !== undefined }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "check-10",
+      "name": "Loop courses",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1760, 0],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "check-11",
+      "name": "Canvas assignments",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [1980, -120],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000,
+          "pagination": {
+            "pagination": {
+              "paginationMode": "responseContainsNextURL",
+              "nextURL": "={{ ((($response.headers.link || '').split(',').find(s => s.includes('rel=\"next\"'))) || '').replace(/.*<([^>]+)>.*/, '$1').trim() }}",
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !(($response.headers.link || '').includes('rel=\"next\"')) }}",
+              "limitPagesFetched": true,
+              "maxRequests": 10
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "@config n8n.credentials.canvas",
+          "name": "Canvas token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "check-12",
+      "name": "Asana tasks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [1980, 60],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Start').first().json.urls.asanaTasks }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "asanaOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000,
+          "pagination": {
+            "pagination": {
+              "paginationMode": "responseContainsNextURL",
+              "nextURL": "={{ $response.body.next_page ? $response.body.next_page.uri : '' }}",
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.next_page }}",
+              "limitPagesFetched": true,
+              "maxRequests": 10
+            }
+          }
+        }
+      },
+      "credentials": {
+        "asanaOAuth2Api": {
+          "id": "@config n8n.credentials.asana",
+          "name": "Asana account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "executeOnce": true
+    },
+    {
+      "id": "check-13",
+      "name": "Decide",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, 60],
+      "parameters": {
+        "jsCode": "@code decide"
+      }
+    },
+    {
+      "id": "check-14",
+      "name": "Work?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2420, 60],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.order !== undefined }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "check-15",
+      "name": "Acquire lease",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [3080, -20],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@config n8n.data_tables.meta",
+          "cachedResultName": "canvas_meta"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "key",
+              "condition": "eq",
+              "keyValue": "sync_lease"
+            },
+            {
+              "keyName": "until",
+              "condition": "lt",
+              "keyValue": "={{ $now.toUTC().toISO() }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "owner": "={{ String($execution.id) }}",
+            "until": "={{ $now.plus({ minutes: $('Start').first().json.leaseMinutes }).toUTC().toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "owner",
+              "displayName": "owner",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "until",
+              "displayName": "until",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "check-16",
+      "name": "Run sync",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [3300, -20],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@config n8n.workflows.sync",
+          "cachedResultName": "Canvas Sync"
+        },
+        "mode": "once",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "order": "={{ $('Decide').first().json.order }}"
+          },
+          "matchingColumns": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false,
+          "schema": [
+            {
+              "id": "order",
+              "displayName": "order",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "any"
+            }
+          ]
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "check-17",
+      "name": "Release lease",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [3520, -20],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@config n8n.data_tables.meta",
+          "cachedResultName": "canvas_meta"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "key",
+              "condition": "eq",
+              "keyValue": "sync_lease"
+            },
+            {
+              "keyName": "owner",
+              "condition": "eq",
+              "keyValue": "={{ String($execution.id) }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "until": "={{ $now.toUTC().toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "until",
+              "displayName": "until",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      },
+      "executeOnce": true,
+      "notes": "Runs whether or not Canvas Sync succeeded; a failed sync alerts on its own."
+    },
+    {
+      "id": "check-18",
+      "name": "Save meta",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [2640, 220],
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@config n8n.data_tables.meta",
+          "cachedResultName": "canvas_meta"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "key",
+              "condition": "eq",
+              "keyValue": "={{ $json.key }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        }
+      }
+    },
+    {
+      "id": "check-19",
+      "name": "Lease row exists",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [2640, -120],
+      "parameters": {
+        "resource": "row",
+        "operation": "rowExists",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@config n8n.data_tables.meta",
+          "cachedResultName": "canvas_meta"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "key",
+              "condition": "eq",
+              "keyValue": "sync_lease"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "check-20",
+      "name": "Lease row missing",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [2640, 60],
+      "parameters": {
+        "resource": "row",
+        "operation": "rowNotExists",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@config n8n.data_tables.meta",
+          "cachedResultName": "canvas_meta"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "key",
+              "condition": "eq",
+              "keyValue": "sync_lease"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "check-21",
+      "name": "Create lease row",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [2860, 60],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@config n8n.data_tables.meta",
+          "cachedResultName": "canvas_meta"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "key": "sync_lease",
+            "value": "",
+            "owner": "",
+            "until": "2000-01-01T00:00:00.000Z"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "key",
+              "displayName": "key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "value",
+              "displayName": "value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "owner",
+              "displayName": "owner",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "until",
+              "displayName": "until",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "executeOnce": true
+    }
+  ],
+  "connections": {
+    "Run now": {
+      "main": [
+        [
+          {
+            "node": "Read meta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every minute": {
+      "main": [
+        [
+          {
+            "node": "Read meta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read meta": {
+      "main": [
+        [
+          {
+            "node": "Read ledger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read ledger": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Canvas planner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Canvas planner": {
+      "main": [
+        [
+          {
+            "node": "Asana events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Asana events": {
+      "main": [
+        [
+          {
+            "node": "Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate": {
+      "main": [
+        [
+          {
+            "node": "Full read?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Full read?": {
+      "main": [
+        [
+          {
+            "node": "Loop courses",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Save meta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop courses": {
+      "main": [
+        [
+          {
+            "node": "Asana tasks",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Canvas assignments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Canvas assignments": {
+      "main": [
+        [
+          {
+            "node": "Loop courses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Asana tasks": {
+      "main": [
+        [
+          {
+            "node": "Decide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide": {
+      "main": [
+        [
+          {
+            "node": "Work?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Work?": {
+      "main": [
+        [
+          {
+            "node": "Lease row exists",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Lease row missing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Save meta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acquire lease": {
+      "main": [
+        [
+          {
+            "node": "Run sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run sync": {
+      "main": [
+        [
+          {
+            "node": "Release lease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lease row exists": {
+      "main": [
+        [
+          {
+            "node": "Acquire lease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lease row missing": {
+      "main": [
+        [
+          {
+            "node": "Create lease row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create lease row": {
+      "main": [
+        [
+          {
+            "node": "Acquire lease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true,
+    "errorWorkflow": "@config n8n.workflows.alert",
+    "timezone": "America/Los_Angeles",
+    "availableInMCP": true
+  },
+  "pinData": {}
+}
