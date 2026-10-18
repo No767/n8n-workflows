@@ -100,7 +100,7 @@ if [[ -n $IMPORT ]]; then
 			exec -T n8n n8n import:workflow --input=/dev/stdin
 	while IFS= read -r id; do
 		docker --log-level error compose -f "$ROOT_DIR/docker-compose.prod.yml" \
-			exec -T n8n n8n publish:workflow --id="$id"
+			exec -T n8n n8n publish:workflow --id="$id" </dev/null
 	done < <(yq '.n8n.workflows[]' "$WORKFLOWS_DIR/canvas.yml")
 	log "published, n8n picks them up within about 10 s"
 fi
