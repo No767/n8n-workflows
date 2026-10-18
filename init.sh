@@ -28,8 +28,9 @@ usage() {
 	printf '  --rotate         generate fresh values for the runner, sandbox, and SearXNG\n'
 	printf '                   keys. Recreate the containers afterwards\n'
 	printf '  --rotate-tokens  ask for the Tailscale auth key, Cloudflare API token,\n'
-	printf '                   BorgBase repository URL and host key, and Healthchecks\n'
-	printf '                   ping URL again. Press enter to keep the current one\n'
+	printf '                   BorgBase repository URL and host key, Healthchecks\n'
+	printf '                   ping URL, and ntfy server URL and topics again. Press\n'
+	printf '                   enter to keep the current one\n'
 	printf '  --help           show this help\n'
 }
 
@@ -138,6 +139,9 @@ ask CLOUDFLARE_API_TOKEN 'Cloudflare API Token' local-cloudflare-api-token
 ask BORG_REPO 'BorgBase Repository URL' local-borg-repo
 ask BORG_KNOWN_HOSTS 'BorgBase Host Key' local-borg-known-hosts
 ask HEALTHCHECKS_URL 'Healthchecks Ping URL' local-healthchecks-url
+ask NTFY_BASE_URL 'ntfy Server URL' local-ntfy-base-url
+ask NTFY_TOPIC 'ntfy Topic' local-ntfy-topic
+ask NTFY_ALERT_TOPIC 'ntfy Alert Topic' local-ntfy-alert-topic
 
 if [[ -n $LOCAL ]]; then
 	(

@@ -1,10 +1,23 @@
 # Environment variables
 secrets.local.env
 
+# Local configs
+workflows/canvas.local.yml
+
+# Node modules and raw code
+node_modules
+workflows/build
+
+# Finalized workflows, but allow encrypted version
+workflows/dist/*.json
+!workflows/dist/*.sops.json
+
+# Age-based Encryption keys
 *.agekey
 keys.txt
 
+# Cloud-init config used in prod
+/configs/cloud-init/config
+
 # Audits for agentic workflows
 .audits
-
-/configs/cloud-init/config

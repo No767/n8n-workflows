@@ -1,0 +1,302 @@
+{
+  "id": "@config n8n.workflows.alert",
+  "name": "Canvas Alert",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "alert-1",
+      "name": "On error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "parameters": {}
+    },
+    {
+      "id": "alert-2",
+      "name": "Alert gate",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [660, 0],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@config n8n.data_tables.meta",
+          "cachedResultName": "canvas_meta"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "key",
+              "condition": "eq",
+              "keyValue": "alert_gate"
+            },
+            {
+              "keyName": "until",
+              "condition": "lt",
+              "keyValue": "={{ $now.toUTC().toISO() }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "until": "={{ $now.plus({ minutes: 30 }).toUTC().toISO() }}",
+            "value": "={{ $('On error').first().json.execution?.error?.message || 'unknown' }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "until",
+              "displayName": "until",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "value",
+              "displayName": "value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "alert-3",
+      "name": "ntfy alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [880, 0],
+      "parameters": {
+        "method": "POST",
+        "url": "@config ntfy.alert_url",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "={{ JSON.stringify({ Title: 'Canvas sync failed: ' + ($('On error').first().json.workflow?.name || 'unknown workflow'), Priority: '4', Click: $('On error').first().json.execution?.url || '' }) }}",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "={{ ($('On error').first().json.execution?.error?.message || 'Unknown error') + '\\nNode: ' + ($('On error').first().json.execution?.lastNodeExecuted || '?') }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "id": "@config n8n.credentials.ntfy",
+          "name": "ntfy token"
+        }
+      },
+      "disabled": "@config ntfy.nodes_disabled",
+      "notes": "Enabled by ntfy.enabled in canvas.yml. At most one alert per 30 min."
+    },
+    {
+      "id": "alert-4",
+      "name": "Gate row exists",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [220, -100],
+      "parameters": {
+        "resource": "row",
+        "operation": "rowExists",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@config n8n.data_tables.meta",
+          "cachedResultName": "canvas_meta"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "key",
+              "condition": "eq",
+              "keyValue": "alert_gate"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "alert-5",
+      "name": "Gate row missing",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [220, 80],
+      "parameters": {
+        "resource": "row",
+        "operation": "rowNotExists",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@config n8n.data_tables.meta",
+          "cachedResultName": "canvas_meta"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "key",
+              "condition": "eq",
+              "keyValue": "alert_gate"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "alert-6",
+      "name": "Create gate row",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [440, 80],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@config n8n.data_tables.meta",
+          "cachedResultName": "canvas_meta"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "key": "alert_gate",
+            "value": "",
+            "owner": "",
+            "until": "2000-01-01T00:00:00.000Z"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "key",
+              "displayName": "key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "value",
+              "displayName": "value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "owner",
+              "displayName": "owner",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "until",
+              "displayName": "until",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "executeOnce": true
+    }
+  ],
+  "connections": {
+    "On error": {
+      "main": [
+        [
+          {
+            "node": "Gate row exists",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Gate row missing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert gate": {
+      "main": [
+        [
+          {
+            "node": "ntfy alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate row exists": {
+      "main": [
+        [
+          {
+            "node": "Alert gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate row missing": {
+      "main": [
+        [
+          {
+            "node": "Create gate row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create gate row": {
+      "main": [
+        [
+          {
+            "node": "Alert gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "pinData": {}
+}

@@ -2,6 +2,9 @@
 python = "3.15.0"
 uv = "0.13.0"
 
+node = "26.12.0"
+pnpm = "12.14.0"
+
 jq = "1.8.2"
 yq = "4.54.1"
 gum = "2.0.2"
@@ -114,3 +117,19 @@ run = "shfmt -l -w -bn -ci {{ config_root }}"
 [tasks."scripts:check"]
 description = "Lints and formats all bash scripts"
 run = [{ task = "scripts:lint" }, { task = "scripts:format" }]
+
+[tasks."workflows:lint"]
+description = "Lints the TS codebase of the workflows"
+env._.path = "{{ config_root }}/workflows/node_modules/.bin"
+dir = "{{ config_root }}/workflows"
+run = ["oxlint --type-aware --type-check --deny-warnings src"]
+
+[tasks."workflows:format"]
+description = "Formats the TS codebase of the workflows"
+dir = "{{ config_root }}/workflows"
+run = "dprint fmt '**/*.ts'"
+
+[tasks."workflows:check"]
+description = "Lints and formats the TS code"
+dir = "{{ config_root }}/workflows"
+run = [{ "task" = "workflows:lint" }, { "task" = "workflows:format" }]

@@ -8,3 +8,8 @@ creation_rules:
       - age:
           - *noelle
           - *prod
+  - path_regex: '\.sops\.json$'
+    key_groups:
+      - age:
+          - *noelle
+          - *prod
