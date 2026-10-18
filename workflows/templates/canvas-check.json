@@ -27,9 +27,7 @@
             }
           ]
         }
-      },
-      "disabled": true,
-      "notes": "Off while the sync runs by hand. Enable it and publish the workflow to poll every minute."
+      }
     },
     {
       "id": "check-3",
