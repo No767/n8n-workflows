@@ -19,10 +19,21 @@
       "matchManagers": [
         "mise"
       ],
-      "groupName": "uv dependencies",
+      "groupName": "mise dependencies",
       "schedule": [
         "* 0-3 * * 1"
       ],
+      "automerge": true
+    },
+    {
+      "matchManagers": [
+        "npm"
+      ],
+      "groupName": "npm dependencies",
+      "schedule": [
+        "* 0-3 * * 1"
+      ],
+      "minimumReleaseAge": "1 day",
       "automerge": true
     },
     {
