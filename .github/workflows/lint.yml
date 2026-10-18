@@ -84,13 +84,13 @@ jobs:
           sudo install -m 0755 /tmp/tailscale /usr/bin/
           sudo install -m 0755 /tmp/tailscaled /usr/sbin/
 
-      - name: Link tailscale daemon unit
-        run: sudo systemctl link /tmp/systemd/tailscaled.service
-
       - name: Install dependencies
         working-directory: workflows
         run: |
           pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Link tailscale daemon unit
+        run: sudo systemctl link /tmp/systemd/tailscaled.service
 
       - name: Check NGINX configs
         run: |
