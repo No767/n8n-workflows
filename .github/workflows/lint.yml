@@ -88,8 +88,9 @@ jobs:
         run: sudo systemctl link /tmp/systemd/tailscaled.service
 
       - name: Install dependencies
+        working-directory: workflows
         run: |
-          pnpm ci --frozen-lockfile --ignore-scripts
+          pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Check NGINX configs
         run: |
@@ -120,6 +121,7 @@ jobs:
           shellcheck **/*.sh
 
       - name: Check Typescript codebase via Oxlint
+        working-directory: workflows
         run: |
           pnpm exec oxlint --type-check --type-aware --deny-warnings src
 
