@@ -209,11 +209,13 @@ services:
 
       N8N_PASSWORD_FILE: /run/secrets/n8nDbPassword
       BORGMATIC_PASSWORD_FILE: /run/secrets/borgmaticDbPassword
+      NTFY_PASSWORD_FILE: /run/secrets/ntfyDbPassword
       POSTGRES_PASSWORD_FILE: /run/secrets/postgresPassword
     secrets:
       - postgresPassword
       - n8nDbPassword
       - borgmaticDbPassword
+      - ntfyDbPassword
     command: postgres -c hba_file=/etc/postgresql/pg_hba.conf
     networks:
       - db-bridge
@@ -227,6 +229,37 @@ services:
       interval: 5m
       start_interval: 30s
       start_period: 5m
+    restart: always
+
+  ntfy:
+    <<: *hard
+    container_name: n8n_ntfy
+    image: binwiederhier/ntfy:v2.32.0@sha256:59250e1d8be2ee2186c4560322f625faef22ace380331f05b63f8842dbd62602
+    init: true
+    environment:
+      NTFY_AUTH_DEFAULT_ACCESS: deny-all
+      NTFY_BEHIND_PROXY: "true"
+      NTFY_WEB_ROOT: disable
+    command:
+      - serve
+    configs:
+      - source: ntfyServer
+        target: /etc/ntfy/server.yml
+        mode: 0400
+    networks:
+      - default
+      - db-bridge
+    read_only: false
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: wget -qO /dev/null http://localhost:80/v1/health
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 5s
     restart: always
 
   nginx:
@@ -305,6 +338,21 @@ secrets:
     environment: N8N_RUNNERS_AUTH_TOKEN
   sandboxApiKey:
     environment: SANDBOX_API_KEY
+  ntfyDbPassword:
+    environment: NTFY_DB_PASSWORD
+
+configs:
+  ntfyServer:
+    content: |
+      database-url: "postgres://ntfy:${NTFY_DB_PASSWORD}@database:5432/ntfy?pool_max_conns=30&pool_conn_max_lifetime=15m&pool_conn_max_idle_time=5m"
+      auth-users:
+        - "devices:${NTFY_DEVICES_PASSWORD_HASH}:user"
+        - "n8n:${NTFY_N8N_PASSWORD_HASH}:user"
+      auth-access:
+        - "devices:${NTFY_TOPIC}:ro"
+        - "devices:${NTFY_ALERT_TOPIC}:ro"
+        - "n8n:${NTFY_TOPIC}:wo"
+        - "n8n:${NTFY_ALERT_TOPIC}:wo"
 
 volumes:
   database:

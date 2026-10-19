@@ -82,14 +82,14 @@
         "method": "POST",
         "url": "@config ntfy.alert_url",
         "authentication": "genericCredentialType",
-        "genericAuthType": "httpTemplatedCustomAuth",
+        "genericAuthType": "httpBasicAuth",
         "sendHeaders": true,
         "specifyHeaders": "json",
-        "jsonHeaders": "={{ JSON.stringify({ Title: 'Canvas sync failed: ' + ($('On error').first().json.workflow?.name || 'unknown workflow'), Priority: '4', Click: $('On error').first().json.execution?.url || '' }) }}",
+        "jsonHeaders": "={{ JSON.stringify(Object.assign({ Title: '[' + ($('On error').first().json.workflow?.name || 'unknown workflow') + '] Run failed', Priority: '4', Tags: 'warning', Click: $('On error').first().json.execution?.url || '' }, $('On error').first().json.execution?.url ? { Actions: 'view, Open in n8n, ' + $('On error').first().json.execution.url + ', clear=true' } : {})) }}",
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "text/plain",
-        "body": "={{ ($('On error').first().json.execution?.error?.message || 'Unknown error') + '\\nNode: ' + ($('On error').first().json.execution?.lastNodeExecuted || '?') }}",
+        "body": "={{ ($('On error').first().json.execution?.lastNodeExecuted || 'Unknown step') + ': ' + ($('On error').first().json.execution?.error?.message || 'Unknown error') + '\\nCheck n8n for details.' }}",
         "options": {
           "response": {
             "response": {
@@ -102,9 +102,9 @@
         }
       },
       "credentials": {
-        "httpTemplatedCustomAuth": {
+        "httpBasicAuth": {
           "id": "@config n8n.credentials.ntfy",
-          "name": "ntfy token"
+          "name": "ntfy"
         }
       },
       "disabled": "@config ntfy.nodes_disabled",

@@ -24,6 +24,7 @@ services:
       - borgPassphrase
       - borgmaticDbPassword
       - n8nDbPassword
+      - ntfyDbPassword
       - source: borgSshKey
         mode: 0400
     configs:
@@ -50,6 +51,8 @@ secrets:
     environment: BORG_SSH_KEY
   n8nDbPassword:
     environment: N8N_DB_PASSWORD
+  ntfyDbPassword:
+    environment: NTFY_DB_PASSWORD
 
 configs:
   borgKnownHosts:

@@ -30,8 +30,10 @@ type RowAction = Omit<Action, "index" | "key" | "planIndex">;
 
 interface Slot extends Reminder {
   priority: number;
-  slot: string;
+  slot: SlotName;
 }
+
+type SlotName = "eve" | "last" | "noon" | "opens";
 
 type Want = "createTask" | "deleteTask" | "event" | "reminders" | "taskWrites";
 
@@ -40,6 +42,12 @@ const EVENTS_URL = `https://www.googleapis.com/calendar/v3/calendars/${encodeURI
 const ZONE = "America/Los_Angeles";
 
 const TIME = { hour: "numeric", minute: "2-digit" } as const;
+const SLOT_TAGS: Record<SlotName, string> = {
+  eve: "date",
+  last: "rotating_light",
+  noon: "hourglass_flowing_sand",
+  opens: "unlock",
+};
 const HORIZON = { hours: 70 };
 const LOCK_GRACE = { minutes: 2 };
 const GONE_CONFIRM = { minutes: 5 };
@@ -141,13 +149,13 @@ class Item {
     const dueAt = this.dueLocal.toInstant();
     const onDueDate = (days: number, plainTime: string) =>
       this.due.date.add({ days }).toZonedDateTime({ plainTime, timeZone: ZONE }).toInstant();
-    const slots: [string, Temporal.Instant, number][] = [["eve", onDueDate(-1, "19:00"), 3]];
+    const slots: [SlotName, Temporal.Instant, number][] = [["eve", onDueDate(-1, "19:00"), 3]];
     if (this.due.kind === "endOfDay") {
-      slots.push(["noon", onDueDate(0, "12:00"), 3], ["last", dueAt.subtract({ hours: 2 }), 4]);
+      slots.push(["noon", onDueDate(0, "12:00"), 4], ["last", dueAt.subtract({ hours: 2 }), 5]);
     } else if (this.due.opensAt && dueAt.since(this.due.opensAt).total("hours") <= 2) {
-      slots.push(["opens", Temporal.Instant.from(this.due.opensAt).subtract({ minutes: 5 }), 5]);
+      slots.push(["opens", Temporal.Instant.from(this.due.opensAt).subtract({ minutes: 5 }), 3]);
     } else {
-      slots.push(["last", dueAt.subtract({ hours: 1 }), 4]);
+      slots.push(["last", dueAt.subtract({ hours: 1 }), 5]);
     }
     const idPrefix = eventId([this.assignment.course_id, this.assignment.id].join(":"));
     return slots.map(([slot, at, priority]) => ({
@@ -262,6 +270,7 @@ class Item {
 
 class ReminderPlanner {
   readonly pending: Reminder[];
+  readonly #asanaGid: string;
   readonly #item: Item;
   readonly #later: Slot[];
   readonly #onNtfy: Slot[];
@@ -274,6 +283,7 @@ class ReminderPlanner {
     this.pending = row.stored.ntfy.filter(
       (reminder) => Temporal.Instant.compare(reminder.at, row.now) > 0,
     );
+    this.#asanaGid = row.stored.asana_gid;
     this.#item = item;
     this.#wantedIds = new Set(wanted.map((slot) => slot.id));
     this.#onNtfy = wanted.filter(
@@ -291,21 +301,58 @@ class ReminderPlanner {
   }
 
   schedule(): RowAction[] {
-    const { assignment, dueLocal, title } = this.#item;
-    const time = dueLocal.toLocaleString("en-US", TIME);
-    const day = `${dueLocal.toLocaleString("en-US", { weekday: "short" })} ${dueLocal.toLocaleString("en-US", { day: "numeric", month: "short" })}`;
+    const { assignment, course, dueLocal } = this.#item;
+    const time =
+      dueLocal.hour === 0 && dueLocal.minute === 0
+        ? "midnight"
+        : dueLocal.toLocaleString("en-US", TIME);
+    const message = (slot: Slot): string => {
+      switch (slot.slot) {
+        case "eve": {
+          return `Due tomorrow at ${time}`;
+        }
+        case "last": {
+          const hours = Math.round(dueLocal.toInstant().since(slot.at).total("hours"));
+          return `${String(hours)} ${hours === 1 ? "hour" : "hours"} left, due ${time}`;
+        }
+        case "noon": {
+          return `Due today at ${time}`;
+        }
+        case "opens": {
+          return `Opens in 5 min, closes ${time}`;
+        }
+      }
+    };
     const pendingIds = new Set(this.pending.map((reminder) => reminder.id));
     return this.#onNtfy
       .filter((slot) => !pendingIds.has(slot.id))
       .map((slot) => ({
         body: {
+          actions: [
+            {
+              action: "view",
+              clear: true,
+              label: slot.slot === "opens" ? "Start in Canvas" : "Open in Canvas",
+              url: assignment.html_url,
+            },
+            ...(this.#asanaGid && slot.slot !== "opens"
+              ? [
+                  {
+                    action: "view",
+                    clear: true,
+                    label: "Asana task",
+                    url: `https://app.asana.com/0/${CONFIG.asana.project}/${this.#asanaGid}`,
+                  },
+                ]
+              : []),
+          ],
           click: assignment.html_url,
           delay: String(Temporal.Instant.from(slot.at).epochMilliseconds / 1000),
-          message:
-            slot.slot === "opens" ? `Opens in 5 min, closes ${time}` : `Due ${day} at ${time}`,
+          message: message(slot),
           priority: slot.priority,
           sequence_id: slot.id,
-          title,
+          tags: [SLOT_TAGS[slot.slot]],
+          title: `[${course.label}] ${assignment.name}`,
           topic: CONFIG.ntfy.topic,
         },
         kind: "schedule",

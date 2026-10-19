@@ -65,7 +65,7 @@ done
 if [[ -n $LOCAL ]]; then
 	[[ -f $LOCAL_VALUES ]] || abort "$LOCAL_VALUES not found, run init.sh --local first"
 	[[ -f $LOCAL_CONFIG ]] || abort "$LOCAL_CONFIG not found, run workflows/init.sh --local first"
-	SECRETS=(yq -p props -o json '.[] |= sub("^\"|\"$"; "")' -- "$LOCAL_VALUES")
+	SECRETS=(yq -p props -o json '.[] |= (sub("^\"|\"$"; "") | sub("\$\$"; "$$"))' -- "$LOCAL_VALUES")
 	OVERRIDE_CONFIG=$(yq -o json "$LOCAL_CONFIG")
 	OUTPUT=$DIST_DIR/canvas.json
 	WRITE=(cat)
