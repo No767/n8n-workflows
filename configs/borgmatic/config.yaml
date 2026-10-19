@@ -24,6 +24,13 @@ postgresql_databases:
     restore_username: n8n
     restore_password: "{credential container n8nDbPassword}"
     compression: none
+  - name: ntfy
+    hostname: database
+    username: borgmatic
+    password: "{credential container borgmaticDbPassword}"
+    restore_username: ntfy
+    restore_password: "{credential container ntfyDbPassword}"
+    compression: none
 
 healthchecks:
   ping_url: ${HEALTHCHECKS_URL}

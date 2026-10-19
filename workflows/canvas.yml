@@ -12,7 +12,7 @@ asana:
   start_dates: false
 
 ntfy:
-  enabled: false
+  enabled: true
 
 n8n:
   workflows:

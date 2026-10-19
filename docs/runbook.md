@@ -19,7 +19,7 @@ You also need:
 - A Tailscale auth key and a Cloudflare API token that can edit DNS for `pastelpink.dev`.
 - A BorgBase repository with no SSH key assigned yet. Copy its URL from the **Name** column: `ssh://<id>@<id>.repo.borgbase.com/./repo`.
 - A Healthchecks.io check with **Period** set to 1 day and **Grace Time** set to 2 hours. Copy its ping URL: `https://hc-ping.com/<uuid>`.
-- A local copy of this repo with `mise install` done. You run `init.sh` there, not on the server.
+- A local copy of this repo with `mise install` done, and `mkpasswd` from Debian's `whois` package. You run `init.sh` there, not on the server.
 
 ## Set up the server
 
@@ -73,6 +73,9 @@ Do these steps once.
    - **BorgBase Repository URL**: the repository URL.
    - **BorgBase Host Key**: the `<id>.repo.borgbase.com ssh-ed25519 AAAA...` line that `ssh-keyscan` printed.
    - **Healthchecks Ping URL**: the check's ping URL.
+   - **ntfy Server URL**: `http://ntfy`.
+   - **ntfy Topic**: the topic for reminders, such as `canvas`.
+   - **ntfy Alert Topic**: the topic for failure alerts, such as `canvas-alerts`.
 
    If `secrets.sops.yml` already has every value, run `sops updatekeys secrets.sops.yml` instead.
 
@@ -203,6 +206,86 @@ Do these steps once, after the stack is up.
 
    The command returns when the backup finishes. The check in Healthchecks turns green.
 
+## Set up ntfy
+
+ntfy sends the Canvas reminders and failure alerts to your phone and other devices. Do these steps once, after the stack is up.
+
+1. If the server ran before ntfy existed, do [Add ntfy to a running server](#add-ntfy-to-a-running-server) first.
+
+2. On your machine, print the password for the `devices` user and the two topics:
+
+   ```sh
+   sops decrypt --extract '["NTFY_DEVICES_PASSWORD"]' secrets.sops.yml
+   sops decrypt --extract '["NTFY_TOPIC"]' secrets.sops.yml
+   sops decrypt --extract '["NTFY_ALERT_TOPIC"]' secrets.sops.yml
+   ```
+
+3. On each device, install the ntfy app. Tap **+** and enter the reminder topic. Turn on **Use another server** and enter `https://n8n-webhooks.taile2ba99.ts.net`. Tap **Subscribe**. At the login prompt, enter `devices` and the password.
+
+4. Subscribe to the alert topic the same way. The app doesn't ask for the login again.
+
+5. On your machine, print the password for the `n8n` user:
+
+   ```sh
+   sops decrypt --extract '["NTFY_N8N_PASSWORD"]' secrets.sops.yml
+   ```
+
+6. On the server, send a test message. Replace `<topic>` with the reminder topic. At the `Enter Password:` prompt, paste the password.
+
+   ```sh
+   sudo docker exec -it n8n_ntfy ntfy publish --user n8n http://localhost/<topic> "Test from the server"
+   ```
+
+   Each device shows the message.
+
+7. If the Canvas workflows already run on the server, create the ntfy credential from [Values for canvas.sops.yml](#values-for-canvassopsyml). Then do [Change an id](#change-an-id).
+
+### Add ntfy to a running server
+
+1. On your machine, run `./init.sh`. It asks only for the ntfy values from step 4 of [Set up the server](#set-up-the-server). Put the new `secrets.sops.yml` on the server. Don't run `run.sh` yet.
+
+2. On your machine, print the password for the `ntfy` database role:
+
+   ```sh
+   sops decrypt --extract '["NTFY_DB_PASSWORD"]' secrets.sops.yml
+   ```
+
+3. On the server, open psql:
+
+   ```sh
+   sudo docker exec -it n8n_database psql --username=postgres --dbname=postgres
+   ```
+
+   Run these statements. At the `\password` prompt, paste the password.
+
+   ```sql
+   CREATE ROLE ntfy LOGIN CONNECTION LIMIT 30;
+   CREATE DATABASE ntfy OWNER ntfy;
+   REVOKE ALL ON DATABASE ntfy FROM public;
+   GRANT CONNECT ON DATABASE ntfy TO ntfy, borgmatic;
+   \connect ntfy
+   ALTER SCHEMA public OWNER TO ntfy;
+   REVOKE ALL ON SCHEMA public FROM public;
+   GRANT ALL ON SCHEMA public TO ntfy;
+   ALTER DEFAULT PRIVILEGES FOR ROLE ntfy REVOKE EXECUTE ON FUNCTIONS FROM public;
+   \password ntfy
+   ```
+
+4. On the server, start ntfy:
+
+   ```sh
+   git -C /opt/n8n-workflows pull
+   sudo /opt/n8n-workflows/run.sh
+   ```
+
+5. On the server, recreate nginx:
+
+   ```sh
+   sudo SOPS_AGE_KEY_CMD='systemd-creds decrypt /etc/credstore.encrypted/age.key' \
+   	sops exec-env /opt/n8n-workflows/secrets.sops.yml \
+   	"docker compose -f /opt/n8n-workflows/docker-compose.prod.yml up -d --wait --force-recreate nginx"
+   ```
+
 ## Deploy the Canvas workflows
 
 The Canvas workflows are Canvas Check, Canvas Sync, Canvas Alert, and Canvas Init. `workflows/build.sh` builds them into `workflows/dist/canvas.sops.json`. `run.sh --import` loads that file into n8n and publishes the workflows.
@@ -216,17 +299,17 @@ Before you start:
 
 `workflows/init.sh` asks for these values and saves them in `workflows/canvas.sops.yml`.
 
-| Prompt                                | Enter                                                                                                                        |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| **Asana Project ID**                  | The number after `/project/` in the Asana project's URL.                                                                     |
-| **Asana Missed Section ID**           | The gid of the project's section for missed assignments. See [Find Asana gids](#find-asana-gids).                            |
-| **Google Calendar ID**                | In Google Calendar, open **Settings**, click the calendar, then copy **Calendar ID** under **Integrate calendar**.           |
-| **n8n Canvas Credential ID**          | The id of the **Header Auth** credential. Its **Name** is `Authorization` and its **Value** is `Bearer <Canvas token>`.      |
-| **n8n Asana Credential ID**           | The id of the **Asana OAuth2 API** credential.                                                                               |
-| **n8n Google Calendar Credential ID** | The id of the **Google Calendar OAuth2 API** credential.                                                                     |
-| **n8n ntfy Credential ID**            | The id of the **Custom Auth** credential for ntfy. Leave it empty while `ntfy.enabled` is `false` in `workflows/canvas.yml`. |
-| **n8n canvas_ledger Table ID**        | The id of the `canvas_ledger` data table. Leave it empty until `run.sh --init` creates the table.                            |
-| **n8n canvas_meta Table ID**          | The id of the `canvas_meta` data table. Leave it empty until `run.sh --init` creates the table.                              |
+| Prompt                                | Enter                                                                                                                                        |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Asana Project ID**                  | The number after `/project/` in the Asana project's URL.                                                                                     |
+| **Asana Missed Section ID**           | The gid of the project's section for missed assignments. See [Find Asana gids](#find-asana-gids).                                            |
+| **Google Calendar ID**                | In Google Calendar, open **Settings**, click the calendar, then copy **Calendar ID** under **Integrate calendar**.                           |
+| **n8n Canvas Credential ID**          | The id of the **Header Auth** credential. Its **Name** is `Authorization` and its **Value** is `Bearer <Canvas token>`.                      |
+| **n8n Asana Credential ID**           | The id of the **Asana OAuth2 API** credential.                                                                                               |
+| **n8n Google Calendar Credential ID** | The id of the **Google Calendar OAuth2 API** credential.                                                                                     |
+| **n8n ntfy Credential ID**            | The id of the **Basic Auth** credential for ntfy. Its **User** is `n8n` and its **Password** is `NTFY_N8N_PASSWORD` from `secrets.sops.yml`. |
+| **n8n canvas_ledger Table ID**        | The id of the `canvas_ledger` data table. Leave it empty until `run.sh --init` creates the table.                                            |
+| **n8n canvas_meta Table ID**          | The id of the `canvas_meta` data table. Leave it empty until `run.sh --init` creates the table.                                              |
 
 To find an n8n id, open the credential or the data table in the server's n8n at https://n8n.pastelpink.dev. The id is the last part of the URL, after `/credentials/` or `/datatables/`. Data tables are under **Overview > Data tables**.
 
@@ -371,15 +454,34 @@ sudo /opt/n8n-workflows/run.sh
 
 Compose recreates only the containers whose config or image changed.
 
+> [!NOTE]
+> Compose doesn't recreate nginx when only `configs/nginx/nginx.conf` changed. If the pull changed that file, recreate nginx:
+>
+> ```sh
+> sudo SOPS_AGE_KEY_CMD='systemd-creds decrypt /etc/credstore.encrypted/age.key' \
+> 	sops exec-env /opt/n8n-workflows/secrets.sops.yml \
+> 	"docker compose -f /opt/n8n-workflows/docker-compose.prod.yml up -d --wait --force-recreate nginx"
+> ```
+
 ### Change secrets
 
 On your machine, run `./init.sh` again. It keeps the existing values and only generates or asks for missing ones.
 
-To replace the Tailscale auth key, the Cloudflare API token, the BorgBase repository URL or host key, or the Healthchecks ping URL, run `./init.sh --rotate-tokens`. It asks for all five again. Press enter at a prompt to keep the current value.
+To replace the Tailscale auth key, the Cloudflare API token, the BorgBase repository URL or host key, the Healthchecks ping URL, or the ntfy server URL or topics, run `./init.sh --rotate-tokens`. It asks for all eight again. Press enter at a prompt to keep the current value.
 
 To replace the runner, sandbox, and SearXNG keys, run `./init.sh --rotate`. After you deploy the new file, force-recreate the containers so they read the new values.
 
 Put the new `secrets.sops.yml` on the server, then run `run.sh`.
+
+If you changed an ntfy value, recreate ntfy on the server:
+
+```sh
+sudo SOPS_AGE_KEY_CMD='systemd-creds decrypt /etc/credstore.encrypted/age.key' \
+	sops exec-env /opt/n8n-workflows/secrets.sops.yml \
+	"docker compose -f /opt/n8n-workflows/docker-compose.prod.yml up -d --wait --force-recreate ntfy"
+```
+
+Then do [Deploy changed workflows](#deploy-changed-workflows). If you changed a topic, subscribe to the new topic on each device.
 
 ### View logs
 
@@ -387,7 +489,7 @@ Put the new `secrets.sops.yml` on the server, then run `run.sh`.
 sudo docker logs -f n8n
 ```
 
-The other containers are `n8n_runners`, `n8n_sandbox_api`, `n8n_sandbox_runner_1`, `n8n_searxng`, `n8n_database`, `n8n_nginx`, and `n8n_tailscale`. Read backup output with `journalctl -u n8n-borgmatic.service`.
+The other containers are `n8n_runners`, `n8n_sandbox_api`, `n8n_sandbox_runner_1`, `n8n_searxng`, `n8n_database`, `n8n_ntfy`, `n8n_nginx`, and `n8n_tailscale`. Read backup output with `journalctl -u n8n-borgmatic.service`.
 
 ### Stop the stack
 
@@ -408,7 +510,7 @@ The timer runs every day and renews the certificate when it's close to expiry. n
 
 ### Back up the database
 
-The timer backs up the `n8n` database to BorgBase once a day. Each run keeps 7 daily, 4 weekly, 12 monthly, and 1 yearly archive and deletes the rest. Every 2 weeks, the run also checks the repository.
+The timer backs up the `n8n` and `ntfy` databases to BorgBase once a day. Each run keeps 7 daily, 4 weekly, 12 monthly, and 1 yearly archive and deletes the rest. Every 2 weeks, the run also checks the repository.
 
 - See when it runs next: `systemctl list-timers n8n-borgmatic.timer`
 - See the last run: `journalctl -u n8n-borgmatic.service`
@@ -427,12 +529,12 @@ Keep `secrets.sops.yml`, the exported repository key, and your own age key somew
    borgmatic list --archive latest
    ```
 
-   The output lists `borgmatic/postgresql_databases/database/n8n`. Don't run `borgmatic restore --dry-run`. It fails on borgmatic 2.1.9.
+   The output lists `borgmatic/postgresql_databases/database/n8n` and `borgmatic/postgresql_databases/database/ntfy`. Don't run `borgmatic restore --dry-run`. It fails on borgmatic 2.1.9.
 
-2. Stop n8n so nothing writes to the database during the restore:
+2. Stop n8n and ntfy so nothing writes to the databases during the restore:
 
    ```sh
-   sudo docker compose -p n8n stop n8n runners
+   sudo docker compose -p n8n stop n8n runners ntfy
    ```
 
 3. Restore the dump:
@@ -441,36 +543,41 @@ Keep `secrets.sops.yml`, the exported repository key, and your own age key somew
    borgmatic restore --archive latest
    ```
 
-   It drops and recreates every table in the `n8n` database. Ignore warnings like `permission denied to analyze "pg_shseclabel"`.
+   It drops and recreates every table in the `n8n` and `ntfy` databases. Ignore warnings like `permission denied to analyze "pg_shseclabel"`.
 
 4. Start n8n again with `sudo /opt/n8n-workflows/run.sh`.
 
 ## When something breaks
 
-| Symptom                                                                   | Fix                                                                                                                                   |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `error: run as root via sudo`                                             | Run `sudo ./run.sh`.                                                                                                                  |
-| `error: ... secrets.sops.yml not found`                                   | Do steps 4 and 5 of the setup.                                                                                                        |
-| `error: sysbox-runc isn't a registered docker runtime`                    | Install Sysbox, then run `sudo systemctl restart docker`.                                                                             |
-| sops can't decrypt `secrets.sops.yml`                                     | Check that `.sops.yaml` has the server's public key and that `sops updatekeys secrets.sops.yml` ran after you added it.               |
-| `run.sh` fails because a container is unhealthy                           | Read that container's logs with `sudo docker logs <container>`.                                                                       |
-| nginx restarts over and over with `cannot load certificate`               | Run `sudo systemctl start n8n-certs.service`, then `run.sh`.                                                                          |
-| The editor doesn't load                                                   | Read `systemctl status tailscale-serve.service` on the server. Check that the DNS record matches `tailscale ip -4`.                   |
-| A webhook returns 404                                                     | The path must start with `/webhook/`.                                                                                                 |
-| A webhook returns 405 or 429                                              | Webhooks accept only `POST` (405). A client that sends more than 5 requests a second, after a burst of 10, hits the rate limit (429). |
-| The webhook host doesn't respond                                          | Read `sudo docker logs n8n_tailscale`. Check that the tailnet policy allows Funnel for `n8n-webhooks`.                                |
-| Certificate renewal fails                                                 | Read `journalctl -u n8n-certs.service`. Check that the Cloudflare token can still edit DNS for `pastelpink.dev`.                      |
-| `n8n-borgmatic.service` failed                                            | Read `journalctl -u n8n-borgmatic.service`, then find the error below.                                                                |
-| `network n8n_db-bridge declared as external, but could not be found`      | The stack isn't up. Run `run.sh`.                                                                                                     |
-| `Host key verification failed.`                                           | Redo the host key check in setup step 4. Run `./init.sh --rotate-tokens` and paste the new line at **BorgBase Host Key**.             |
-| `Permission denied (publickey)`                                           | Do step 3 of [Set up backups](#set-up-backups).                                                                                       |
-| `Failed to create/acquire the lock`                                       | If `systemctl is-active n8n-borgmatic.service` prints `inactive` or `failed`, run `borgmatic break-lock`.                             |
-| `pg_hba.conf rejects connection for host ..., user "borgmatic"`           | Run `run.sh`.                                                                                                                         |
-| `pg_dump: error: ... password authentication failed for user "borgmatic"` | Do step 2 of [Set up backups](#set-up-backups).                                                                                       |
-| `error: yq is required`                                                   | Install `yq` v4. See [Before you start](#before-you-start).                                                                           |
-| `error: ... canvas.sops.json not found, run workflows/build.sh first`     | Do steps 1 and 2 of [Deploy changed workflows](#deploy-changed-workflows), then pull on the server.                                   |
-| `error: the config is missing <values>`                                   | Fill in the listed values. See [Values for canvas.sops.yml](#values-for-canvassopsyml).                                               |
-| `error: tsc not found, run aube install first`                            | Run `aube install` in `workflows/`.                                                                                                   |
-| sops can't decrypt `canvas.sops.json` on the server                       | Check that `.sops.yaml` lists the server's key for `\.sops\.json$`, then rebuild.                                                     |
-| Canvas Init fails with `... is missing columns: ...`                      | Add the listed columns in **Overview > Data tables**. Then run Canvas Init with **Execute workflow**.                                 |
-| A Canvas workflow fails with a credential or data table error             | Check the ids in [Values for canvas.sops.yml](#values-for-canvassopsyml), then do [Change an id](#change-an-id).                      |
+| Symptom                                                                   | Fix                                                                                                                                                                           |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `error: run as root via sudo`                                             | Run `sudo ./run.sh`.                                                                                                                                                          |
+| `error: ... secrets.sops.yml not found`                                   | Do steps 4 and 5 of the setup.                                                                                                                                                |
+| `error: sysbox-runc isn't a registered docker runtime`                    | Install Sysbox, then run `sudo systemctl restart docker`.                                                                                                                     |
+| sops can't decrypt `secrets.sops.yml`                                     | Check that `.sops.yaml` has the server's public key and that `sops updatekeys secrets.sops.yml` ran after you added it.                                                       |
+| `run.sh` fails because a container is unhealthy                           | Read that container's logs with `sudo docker logs <container>`.                                                                                                               |
+| nginx restarts over and over with `cannot load certificate`               | Run `sudo systemctl start n8n-certs.service`, then `run.sh`.                                                                                                                  |
+| The editor doesn't load                                                   | Read `systemctl status tailscale-serve.service` on the server. Check that the DNS record matches `tailscale ip -4`.                                                           |
+| A webhook returns 404                                                     | The path must start with `/webhook/`.                                                                                                                                         |
+| A webhook returns 405 or 429                                              | Webhooks accept only `POST` (405). A client that sends more than 5 requests a second, after a burst of 10, hits the rate limit (429).                                         |
+| The webhook host doesn't respond                                          | Read `sudo docker logs n8n_tailscale`. Check that the tailnet policy allows Funnel for `n8n-webhooks`.                                                                        |
+| Certificate renewal fails                                                 | Read `journalctl -u n8n-certs.service`. Check that the Cloudflare token can still edit DNS for `pastelpink.dev`.                                                              |
+| `n8n-borgmatic.service` failed                                            | Read `journalctl -u n8n-borgmatic.service`, then find the error below.                                                                                                        |
+| `network n8n_db-bridge declared as external, but could not be found`      | The stack isn't up. Run `run.sh`.                                                                                                                                             |
+| `Host key verification failed.`                                           | Redo the host key check in setup step 4. Run `./init.sh --rotate-tokens` and paste the new line at **BorgBase Host Key**.                                                     |
+| `Permission denied (publickey)`                                           | Do step 3 of [Set up backups](#set-up-backups).                                                                                                                               |
+| `Failed to create/acquire the lock`                                       | If `systemctl is-active n8n-borgmatic.service` prints `inactive` or `failed`, run `borgmatic break-lock`.                                                                     |
+| `pg_hba.conf rejects connection for host ..., user "borgmatic"`           | Run `run.sh`.                                                                                                                                                                 |
+| `pg_dump: error: ... password authentication failed for user "borgmatic"` | Do step 2 of [Set up backups](#set-up-backups).                                                                                                                               |
+| `error: yq is required`                                                   | Install `yq` v4. See [Before you start](#before-you-start).                                                                                                                   |
+| `error: mkpasswd is required`                                             | Run `sudo apt install whois`.                                                                                                                                                 |
+| `n8n_ntfy` logs show `password authentication failed for user "ntfy"`     | Do steps 2 and 3 of [Add ntfy to a running server](#add-ntfy-to-a-running-server).                                                                                            |
+| The ntfy app shows 401 or asks for the login again                        | Enter `devices` and `NTFY_DEVICES_PASSWORD` from `secrets.sops.yml`.                                                                                                          |
+| **ntfy schedule**, **ntfy cancel**, or **ntfy alert** returns 403         | Check that the ntfy credential's **User** is `n8n` and its **Password** is `NTFY_N8N_PASSWORD`. If you changed a topic, recreate ntfy. See [Change secrets](#change-secrets). |
+| The ntfy app doesn't connect                                              | Read `sudo docker logs n8n_nginx`. Check that the tailnet policy allows Funnel for `n8n-webhooks`.                                                                            |
+| `error: ... canvas.sops.json not found, run workflows/build.sh first`     | Do steps 1 and 2 of [Deploy changed workflows](#deploy-changed-workflows), then pull on the server.                                                                           |
+| `error: the config is missing <values>`                                   | Fill in the listed values. See [Values for canvas.sops.yml](#values-for-canvassopsyml).                                                                                       |
+| `error: tsc not found, run aube install first`                            | Run `aube install` in `workflows/`.                                                                                                                                           |
+| sops can't decrypt `canvas.sops.json` on the server                       | Check that `.sops.yaml` lists the server's key for `\.sops\.json$`, then rebuild.                                                                                             |
+| Canvas Init fails with `... is missing columns: ...`                      | Add the listed columns in **Overview > Data tables**. Then run Canvas Init with **Execute workflow**.                                                                         |
+| A Canvas workflow fails with a credential or data table error             | Check the ids in [Values for canvas.sops.yml](#values-for-canvassopsyml), then do [Change an id](#change-an-id).                                                              |

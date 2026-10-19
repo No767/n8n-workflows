@@ -5,9 +5,10 @@
 //   taskGone  the task was deleted by hand; the row becomes hand_deleted
 // A status that isn't listed is a failure: the row keeps its old state, records last_error and retries.
 // Seen on n8n-local: lookup 404 (no such task), Asana create 201, Asana write 200, Asana delete 200,
-// Calendar insert/patch 200, Calendar delete 204. The ntfy codes come from its docs and are unverified.
+// Calendar insert/patch 200, Calendar delete 204, ntfy schedule 200, ntfy cancel 200. ntfy answers a
+// cancel with 200 even when no message has that id, so there's no 404 to accept.
 const OUTCOMES: Record<ActionKind, Partial<Record<number, Outcome>>> = {
-  cancel: { 200: "ok", 404: "ok", 410: "ok" },
+  cancel: { 200: "ok" },
   completeTask: { 200: "ok", 404: "taskGone" },
   createTask: { 200: "adopted", 201: "ok" }, // 200 comes from Asana lookup, 201 from Asana create
   deleteEvent: { 204: "ok", 404: "ok", 410: "ok" },

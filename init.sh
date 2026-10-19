@@ -69,7 +69,7 @@ done
 
 [[ -z $PRINT || -n $LOCAL ]] || abort "--print only works with --local"
 
-REQUIRED=(openssl yq)
+REQUIRED=(mkpasswd openssl yq)
 [[ -n $LOCAL ]] || REQUIRED+=(gum sops)
 [[ -z $ROTATE_TOKENS ]] || REQUIRED+=(gum)
 
@@ -78,7 +78,7 @@ for cmd in "${REQUIRED[@]}"; do
 done
 
 if [[ -n $LOCAL ]]; then
-	[[ -f $LOCAL_VALUES ]] && KEPT=(yq -p props -o yaml '.[] |= sub("^\"|\"$"; "")' -- "$LOCAL_VALUES")
+	[[ -f $LOCAL_VALUES ]] && KEPT=(yq -p props -o yaml '.[] |= (sub("^\"|\"$"; "") | sub("\$\$"; "$$"))' -- "$LOCAL_VALUES")
 elif [[ -f $ENCRYPTED ]]; then
 	log "reading the values already in $ENCRYPTED"
 	KEPT=(sops --decrypt "$ENCRYPTED")
@@ -134,6 +134,12 @@ generate SEARXNG_SECRET 24
 generate BORG_PASSPHRASE 32
 put BORG_SSH_KEY "${EXISTING[BORG_SSH_KEY]:-$(openssl genpkey -algorithm ed25519)}"
 
+generate NTFY_DB_PASSWORD 32
+generate NTFY_DEVICES_PASSWORD 32
+generate NTFY_N8N_PASSWORD 32
+put NTFY_DEVICES_PASSWORD_HASH "${EXISTING[NTFY_DEVICES_PASSWORD_HASH]:-$(mkpasswd -m bcrypt -R 10 -s <<<"${SECRETS[NTFY_DEVICES_PASSWORD]}")}"
+put NTFY_N8N_PASSWORD_HASH "${EXISTING[NTFY_N8N_PASSWORD_HASH]:-$(mkpasswd -m bcrypt -R 10 -s <<<"${SECRETS[NTFY_N8N_PASSWORD]}")}"
+
 ask TS_AUTHKEY 'Tailscale Auth Key' local-tailscale-auth-key
 ask CLOUDFLARE_API_TOKEN 'Cloudflare API Token' local-cloudflare-api-token
 ask BORG_REPO 'BorgBase Repository URL' local-borg-repo
@@ -147,7 +153,7 @@ if [[ -n $LOCAL ]]; then
 	(
 		umask 077
 		for key in "${KEYS[@]}"; do
-			KEY=$key VALUE=${SECRETS[$key]} yq -n '{strenv(KEY): "\"" + strenv(VALUE) + "\""}'
+			KEY=$key VALUE=${SECRETS[$key]} yq -n '{strenv(KEY): "\"" + (strenv(VALUE) | sub("\$"; "$$$$")) + "\""}'
 		done \
 			| yq -o props --properties-separator '=' >"$LOCAL_VALUES"
 	)
