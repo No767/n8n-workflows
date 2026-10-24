@@ -16,7 +16,7 @@ requires-dist = [{ name = "nginxfmt", specifier = "==1.4.0" }]
 [[package]]
 name = "nginxfmt"
 version = "1.4.0"
-source = { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple/" }
 sdist = { url = "https://files.pythonhosted.org/packages/60/24/1a1d7b1a153890f1b2d9a6e4e677471976d053409567c6e979a64a6c7150/nginxfmt-1.4.0.tar.gz", hash = "sha256:e5dcb3e7e05eafd60a2fcb3fe896af538c94dfbde971c212e99178eb4e26d35f", size = 9936, upload-time = "2026-03-09T23:47:39.721Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/65/de/2eeb85279374b6990898ac3d6909ab190b704c11131633a6272b5d340b42/nginxfmt-1.4.0-py3-none-any.whl", hash = "sha256:200c434fa97a90b5ecee9cf35ccfcfb596b15ff3d9ad3d3ce7006d444420b5b2", size = 11308, upload-time = "2026-03-09T23:47:38.531Z" },
