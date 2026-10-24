@@ -22,9 +22,12 @@ abort() {
 usage() {
 	printf 'usage: %s [--local] [--ask-all] [--help]\n\n' "${0##*/}"
 	printf 'Asks for the Asana, Google Calendar and n8n ids missing from %s,\n' "$ENCRYPTED_CONFIG"
-	printf 'then encrypts it again. The Canvas URL and the courses are edited with sops edit\n\n'
+	printf 'then encrypts it again. The Status and Priority field ids are read from the Asana\n'
+	printf 'project with a personal access token. The Canvas URL and the courses are edited with\n'
+	printf 'sops edit\n\n'
 	printf '  --local    fill in %s instead, in plaintext. For n8n-local\n' "$LOCAL_CONFIG"
-	printf '  --ask-all  ask for every id again. Press enter to keep the current one\n'
+	printf '  --ask-all  ask for every id again and read the field ids again. Press enter to\n'
+	printf '             keep the current one\n'
 	printf '  --help     show this help\n'
 }
 
@@ -51,7 +54,7 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
-REQUIRED=(gum yq)
+REQUIRED=(curl gum jq yq)
 [[ -n $LOCAL ]] || REQUIRED+=(sops)
 
 for cmd in "${REQUIRED[@]}"; do
@@ -77,6 +80,21 @@ ask() {
 
 ask asana.project 'Asana Project ID'
 ask asana.missed_section 'Asana Missed Section ID'
+
+if [[ -n $ASK_ALL || $(yq '.asana.fields == null' <<<"$CONFIG") == true ]]; then
+	PROJECT=$(yq '.asana.project' <<<"$CONFIG")
+	ASANA_TOKEN=$(gum input --password --no-show-help --prompt 'Asana Personal Access Token: ' </dev/tty)
+
+	log "reading the Status and Priority fields of Asana project $PROJECT"
+	SETTINGS=$(curl -fsS -H @- \
+		"https://app.asana.com/api/1.0/projects/$PROJECT/custom_field_settings?limit=100&opt_fields=custom_field.gid,custom_field.name,custom_field.enum_options.gid,custom_field.enum_options.name" \
+		<<<"Authorization: Bearer $ASANA_TOKEN") \
+		|| abort "couldn't read the custom fields of Asana project $PROJECT"
+
+	FIELDS=$(jq -c -f "$ROOT_DIR/fields.jq" <<<"$SETTINGS")
+	CONFIG=$(FIELDS=$FIELDS yq '.asana.fields = env(FIELDS) | (.asana.fields | .. | (., key)) style=""' <<<"$CONFIG")
+fi
+
 ask calendar.id 'Google Calendar ID'
 ask n8n.credentials.canvas 'n8n Canvas Credential ID'
 ask n8n.credentials.asana 'n8n Asana Credential ID'

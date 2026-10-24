@@ -55,11 +55,18 @@ interface AsanaPage<T> {
 
 type AsanaState = "hand_completed" | "hand_deleted" | "live" | "none";
 
+interface AsanaTask extends AsanaWritten {
+  priority: Priority;
+  status: Status;
+}
+
 interface AsanaWritten {
   completed: boolean;
   due: AsanaDates;
   name: string;
   notesHash: string;
+  priority?: Priority;
+  status?: Status;
 }
 
 interface CalendarEvent {
@@ -91,7 +98,15 @@ interface CanvasSubmission {
 }
 
 interface Config {
-  asana: { missed_section: string; project: string; start_dates: boolean };
+  asana: {
+    fields: {
+      priority: { gid: string; options: Record<Priority, string> };
+      status: { gid: string; options: Record<Status, string> };
+    };
+    missed_section: string;
+    project: string;
+    start_dates: boolean;
+  };
   calendar: { id: string };
   canvas: { base_url: string };
   canvas_min_remaining: number;
@@ -216,6 +231,8 @@ interface PlanSummary {
   route: "none";
 }
 
+type Priority = "critical" | "high" | "low" | "medium" | "none";
+
 interface RateLogEntry {
   call: string;
   cost?: number;
@@ -297,6 +314,8 @@ interface StartOutput {
   wakeKeys: string[];
   watched: Watched[];
 }
+
+type Status = "done" | "missed" | "todo";
 
 type TaskSeen = "absent" | "completed" | "open";
 

@@ -19,7 +19,7 @@ You also need:
 - A Tailscale auth key and a Cloudflare API token that can edit DNS for `pastelpink.dev`.
 - A BorgBase repository with no SSH key assigned yet. Copy its URL from the **Name** column: `ssh://<id>@<id>.repo.borgbase.com/./repo`.
 - A Healthchecks.io check with **Period** set to 1 day and **Grace Time** set to 2 hours. Copy its ping URL: `https://hc-ping.com/<uuid>`.
-- A local copy of this repo with `mise install` done, and `mkpasswd` from Debian's `whois` package. You run `init.sh` there, not on the server.
+- A local copy of this repo with `mise install` done, `curl`, and `mkpasswd` from Debian's `whois` package. You run `init.sh` there, not on the server.
 
 ## Set up the server
 
@@ -313,6 +313,8 @@ Before you start:
 
 To find an n8n id, open the credential or the data table in the server's n8n at https://n8n.pastelpink.dev. The id is the last part of the URL, after `/credentials/` or `/datatables/`. Data tables are under **Overview > Data tables**.
 
+`workflows/init.sh` reads the gids of the Status and Priority fields from the Asana project and saves them under `asana.fields`. At the **Asana Personal Access Token** prompt, paste the token from [Add the Status and Priority fields](#add-the-status-and-priority-fields). `workflows/init.sh` doesn't save the token.
+
 `workflows/init.sh` doesn't ask for the Canvas URL or the courses. Set them with `sops edit workflows/canvas.sops.yml`:
 
 ```yaml
@@ -376,30 +378,46 @@ courses:
 
    `match.section` is also an Asana section gid from step 3. For example, if step 3 prints `1219348633798302  In Lecture Questions`, set `match.section: "1219348633798302"` on the PHYS 008 course.
 
+### Add the Status and Priority fields
+
+Canvas Sync sets a Status and a Priority on each Asana task. Add both fields to the Asana project before you run `workflows/init.sh`.
+
+1. In the Asana project, add a single-select field named `Status` with these options: `Todo`, `In progress`, `Done`, and `Missed`.
+
+2. In the same project, add a single-select field named `Priority` with these options: `Critical`, `High`, `Medium`, `Low`, and `None`.
+
+3. Create an Asana personal access token in the [Asana developer console](https://app.asana.com/0/my-apps).
+
+The field and option names must match exactly. Canvas Sync never sets `In progress`. Set it by hand in Asana.
+
 ### Deploy for the first time
 
 1. In the server's n8n at https://n8n.pastelpink.dev, create the credentials listed in [Values for canvas.sops.yml](#values-for-canvassopsyml).
 
-2. On your machine, set the Canvas URL and the courses:
+2. In Asana, do [Add the Status and Priority fields](#add-the-status-and-priority-fields).
+
+3. On your machine, set the Canvas URL and the courses:
 
    ```sh
    sops edit workflows/canvas.sops.yml
    ```
 
-3. On your machine, run `workflows/init.sh`. Leave both table ids empty.
+4. On your machine, run `workflows/init.sh`. Leave both table ids empty. At the **Asana Personal Access Token** prompt, paste the token from step 2.
 
-4. On the server, create the data tables:
+5. Revoke the token in the [Asana developer console](https://app.asana.com/0/my-apps).
+
+6. On the server, create the data tables:
 
    ```sh
    git -C /opt/n8n-workflows pull
    sudo /opt/n8n-workflows/run.sh --init
    ```
 
-5. In the server's n8n at https://n8n.pastelpink.dev, open Canvas Init's executions and check that the latest run succeeded. **Overview > Data tables** lists `canvas_ledger` and `canvas_meta`.
+7. In the server's n8n at https://n8n.pastelpink.dev, open Canvas Init's executions and check that the latest run succeeded. **Overview > Data tables** lists `canvas_ledger` and `canvas_meta`.
 
-6. On your machine, run `workflows/init.sh` again. It asks only for the two table ids.
+8. On your machine, run `workflows/init.sh` again. It asks only for the two table ids.
 
-7. On your machine, build the workflows:
+9. On your machine, build the workflows:
 
    ```sh
    workflows/build.sh
@@ -407,18 +425,18 @@ courses:
 
    The last line is `==> wrote .../workflows/dist/canvas.sops.json`.
 
-8. Commit and push `workflows/canvas.sops.yml` and `workflows/dist/canvas.sops.json`.
+10. Commit and push `workflows/canvas.sops.yml` and `workflows/dist/canvas.sops.json`.
 
-9. On the server, import the workflows:
+11. On the server, import the workflows:
 
-   ```sh
-   git -C /opt/n8n-workflows pull
-   sudo /opt/n8n-workflows/run.sh --import
-   ```
+    ```sh
+    git -C /opt/n8n-workflows pull
+    sudo /opt/n8n-workflows/run.sh --import
+    ```
 
-   The last line is `==> published, n8n picks them up within about 10 s`.
+    The last line is `==> published, n8n picks them up within about 10 s`.
 
-10. In the server's n8n at https://n8n.pastelpink.dev, check that the four Canvas workflows are published. Canvas Check runs every minute. Its first run shows up in its executions within a minute.
+12. In the server's n8n at https://n8n.pastelpink.dev, check that the four Canvas workflows are published. Canvas Check runs every minute. Its first run shows up in its executions within a minute.
 
 ### Deploy changed workflows
 
@@ -435,11 +453,37 @@ Do this after you change anything in `workflows/`, or the ntfy values in `secret
    sudo /opt/n8n-workflows/run.sh --import
    ```
 
+### Add Status and Priority to running workflows
+
+Do this once if the Canvas workflows ran on the server before the Status and Priority fields existed.
+
+1. In Asana, do [Add the Status and Priority fields](#add-the-status-and-priority-fields).
+
+2. On your machine, run `workflows/init.sh`. At the **Asana Personal Access Token** prompt, paste the token from step 1. The last line is `==> wrote .../workflows/canvas.sops.yml`.
+
+3. Revoke the token in the [Asana developer console](https://app.asana.com/0/my-apps).
+
+4. Do [Deploy changed workflows](#deploy-changed-workflows).
+
+5. In the server's n8n at https://n8n.pastelpink.dev, open Canvas Check and click **Execute workflow**.
+
+6. In Asana, check the tasks:
+
+   - Open tasks show `Todo` and a Priority.
+   - Missed tasks show `Missed` and `None`.
+   - Done tasks show `Done` and `None`.
+
+   Canvas Sync writes at most 30 changes to Asana per run. If some tasks still show no Status, wait for the next runs, about 5 minutes apart.
+
 ### Change an id
 
-1. On your machine, run `workflows/init.sh --ask-all`. It asks for every value in [Values for canvas.sops.yml](#values-for-canvassopsyml). Press enter at a prompt to keep the current value.
+Do this when an id changes. A Status or Priority id changes when you delete and recreate the field or one of its options in Asana.
 
-2. Do [Deploy changed workflows](#deploy-changed-workflows).
+1. On your machine, run `workflows/init.sh --ask-all`. It asks for every value in [Values for canvas.sops.yml](#values-for-canvassopsyml). Press enter at a prompt to keep the current value. At the **Asana Personal Access Token** prompt, paste a token from the [Asana developer console](https://app.asana.com/0/my-apps).
+
+2. Revoke the token in the Asana developer console.
+
+3. Do [Deploy changed workflows](#deploy-changed-workflows).
 
 If you reconnect or edit a credential in n8n and its id stays the same, you don't need to deploy.
 
@@ -576,7 +620,12 @@ Keep `secrets.sops.yml`, the exported repository key, and your own age key somew
 | **ntfy schedule**, **ntfy cancel**, or **ntfy alert** returns 403         | Check that the ntfy credential's **User** is `n8n` and its **Password** is `NTFY_N8N_PASSWORD`. If you changed a topic, recreate ntfy. See [Change secrets](#change-secrets). |
 | The ntfy app doesn't connect                                              | Read `sudo docker logs n8n_nginx`. Check that the tailnet policy allows Funnel for `n8n-webhooks`.                                                                            |
 | `error: ... canvas.sops.json not found, run workflows/build.sh first`     | Do steps 1 and 2 of [Deploy changed workflows](#deploy-changed-workflows), then pull on the server.                                                                           |
+| `error: the config is missing asana.fields`                               | Run `workflows/init.sh`. See [Add Status and Priority to running workflows](#add-status-and-priority-to-running-workflows).                                                   |
 | `error: the config is missing <values>`                                   | Fill in the listed values. See [Values for canvas.sops.yml](#values-for-canvassopsyml).                                                                                       |
+| `jq: error ...: the Asana project has no <name> field`                    | Add the field. See [Add the Status and Priority fields](#add-the-status-and-priority-fields). Then run `workflows/init.sh` again.                                             |
+| `jq: error ...: the <name> field has no "<option>" option`                | Add the option, or rename it to the name in the error. Then run `workflows/init.sh` again.                                                                                    |
+| `error: couldn't read the custom fields of Asana project <gid>`           | Check the token and the **Asana Project ID**. Then run `workflows/init.sh` again.                                                                                             |
+| `last_error` in `canvas_ledger` shows a `400` error about a custom field  | Do [Change an id](#change-an-id).                                                                                                                                             |
 | `error: tsc not found, run aube install first`                            | Run `aube install` in `workflows/`.                                                                                                                                           |
 | sops can't decrypt `canvas.sops.json` on the server                       | Check that `.sops.yaml` lists the server's key for `\.sops\.json$`, then rebuild.                                                                                             |
 | Canvas Init fails with `... is missing columns: ...`                      | Add the listed columns in **Overview > Data tables**. Then run Canvas Init with **Execute workflow**.                                                                         |

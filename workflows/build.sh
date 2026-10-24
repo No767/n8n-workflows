@@ -88,7 +88,8 @@ MERGED_CONFIG=$("${SECRETS[@]}" | PLAIN_CONFIG=$PLAIN_CONFIG DECRYPTED_CONFIG=$D
 
 MISSING=$(jq -r '
 	if .ntfy.enabled then . else del(.ntfy, .n8n.credentials.ntfy) end
-	| [paths(. == "" or . == null) | join(".")]
+	| [paths(. == "" or . == null) | join(".")] + if .asana.fields then [] else ["asana.fields"] end
+	| unique
 	| join(", ")' <<<"$MERGED_CONFIG")
 [[ -z $MISSING ]] || abort "the config is missing $MISSING"
 
