@@ -13,7 +13,7 @@ services:
   n8n:
     <<: *hard
     container_name: n8n
-    image: docker.io/n8nio/n8n:2.42.3@sha256:240eaa2a3d491adac5817aa4c3f1c521bb18ec79f6e448517158d5220ee0f37b
+    image: docker.io/n8nio/n8n:2.45.3@sha256:bf88c3783fc4b2a90a007bb99b04ad2f6a9627f41499baf72ca67559c51c7f4c
     environment:
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: database
@@ -67,7 +67,7 @@ services:
   runners:
     <<: *hard
     container_name: n8n_runners
-    image: ghcr.io/n8n-io/runners:2.42.3@sha256:616b9309b79b0c756ad44f6a520ea24e6fa776401b7bd23fbb72e2f06e6c6798
+    image: ghcr.io/n8n-io/runners:2.45.3@sha256:c57f7d17c37e89fc8128c165063874db788b599ed9c5d263c7adc6d3b59a0477
     environment:
       N8N_RUNNERS_AUTH_TOKEN: ${N8N_RUNNERS_AUTH_TOKEN}
 
@@ -89,7 +89,7 @@ services:
 
   sandbox-runner-1:
     container_name: n8n_sandbox_runner_1
-    image: ghcr.io/n8n-io/n8n-sandbox-service-runner-dind:1.6.0@sha256:9187a67466dc4e58c5b085b4da6e8c9818608646b6d846275e96024a29651fd9
+    image: ghcr.io/n8n-io/n8n-sandbox-service-runner-dind:1.11.0@sha256:69320f55ae52781b66efe3e34b1ad814a63fae4d3f85cb4aabcee1f650d20636
     environment:
       SANDBOX_RUNNER_DOCKER_SANDBOX_IMAGE: ghcr.io/n8n-io/n8n-sandbox-service-sandbox:1.3.4@sha256:634b2c28f03db91803cc8d0b0a03bbf75f9d5d09b531277ecd5c82877ef7ae5d
       SANDBOX_RUNNER_REGISTRATION_TOKEN: ${SANDBOX_REGISTRATION_TOKEN}
@@ -122,7 +122,7 @@ services:
   sandbox-api:
     <<: *hard
     container_name: n8n_sandbox_api
-    image: ghcr.io/n8n-io/n8n-sandbox-service-api:1.6.0@sha256:505bb8f367391b23c6e89a09df9476a03e67a2893817b1c69ff370dede846cf3
+    image: ghcr.io/n8n-io/n8n-sandbox-service-api:1.11.0@sha256:7f55cb157292e7a98848c2d35a352932c0c5c967cbab39d87f9b44d3bb256303
     environment:
       SANDBOX_API_KEYS: ${SANDBOX_API_KEY}
       SANDBOX_API_RUNNER_REGISTRATION_TOKEN: ${SANDBOX_REGISTRATION_TOKEN}
@@ -156,7 +156,7 @@ services:
   sandbox-certs:
     <<: *hard
     container_name: n8n_sandbox_certs
-    image: ghcr.io/n8n-io/n8n-sandbox-service-api:1.6.0@sha256:505bb8f367391b23c6e89a09df9476a03e67a2893817b1c69ff370dede846cf3
+    image: ghcr.io/n8n-io/n8n-sandbox-service-api:1.11.0@sha256:7f55cb157292e7a98848c2d35a352932c0c5c967cbab39d87f9b44d3bb256303
     user: 0:0
     environment:
       NUM_RUNNERS: "1"
@@ -200,7 +200,7 @@ services:
   database:
     <<: *hard
     container_name: n8n_database
-    image: postgres:18@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722
+    image: postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
     user: 999:999
     environment:
       POSTGRES_DB: n8n
@@ -234,7 +234,7 @@ services:
   ntfy:
     <<: *hard
     container_name: n8n_ntfy
-    image: binwiederhier/ntfy:v2.32.0@sha256:59250e1d8be2ee2186c4560322f625faef22ace380331f05b63f8842dbd62602
+    image: binwiederhier/ntfy:v2.33.1@sha256:29bc952294d58957f6ca6638eca9a653a33555989224edbdf4bb9433ee606497
     init: true
     environment:
       NTFY_AUTH_DEFAULT_ACCESS: deny-all
@@ -265,7 +265,7 @@ services:
   nginx:
     <<: *hard
     container_name: n8n_nginx
-    image: nginx:1.31.6@sha256:908dc23e643a1447dbfb2e189ed268bfde6a51a5bf9a34d3dd3440a24f58ccf7
+    image: nginx:1.31.8@sha256:6e67f8eaac94fc456588d4ff6c470d984841f5b5dc4279863d5cbe6ec5a60def
     ports:
       - 127.0.0.1:443:443
     cap_add:
@@ -295,7 +295,7 @@ services:
   tailscale:
     <<: *hard
     container_name: n8n_tailscale
-    image: tailscale/tailscale:v1.102.5@sha256:c507f3a2a6ab1cabd8d809b98edeb41edbd5c3fb6ad9632ffd098b4c7d0b4065
+    image: tailscale/tailscale:v1.104.2@sha256:b11583ad2e93e4671128538c88cf11f460444a5d7e449311dd1933a400ab849d
     environment:
       TS_AUTHKEY: ${TS_AUTHKEY}
 
