@@ -35,7 +35,7 @@ interface Slot extends Reminder {
 
 type SlotName = "eve" | "last" | "noon" | "opens";
 
-type Want = "createTask" | "deleteTask" | "event" | "reminders" | "taskWrites";
+type Want = "createTask" | "deleteTask" | "event" | "priority" | "reminders" | "taskWrites";
 
 const ASANA_API = "https://app.asana.com/api/1.0";
 const EVENTS_URL = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CONFIG.calendar.id)}/events`;
@@ -53,6 +53,11 @@ const LOCK_GRACE = { minutes: 2 };
 const GONE_CONFIRM = { minutes: 5 };
 const TARGETS = ["asana", "gcal", "ntfy"] as const;
 const ASANA_DATES = ["due_at", "due_on", "start_at", "start_on"] as const;
+const PRIORITY_STEPS: [number, Priority][] = [
+  [0, "critical"],
+  [1, "high"],
+  [20, "medium"],
+]; // at most this many days left, else low
 const ASANA_STATES = new Set<string>(["hand_completed", "hand_deleted", "live", "none"]);
 const DONE_STATES = new Set<string | undefined>(["pending_review", "submitted"]);
 const HAND_CHANGES = new Map<string, AsanaState>([
@@ -67,8 +72,8 @@ const WANTS = new Map<string, Want[]>([
   ["gone/live", ["deleteTask"]],
   ["missed/live", ["taskWrites"]],
   ["missed/none", ["createTask"]],
-  ["open/live", ["event", "reminders", "taskWrites"]],
-  ["open/none", ["createTask", "event", "reminders"]],
+  ["open/live", ["event", "priority", "reminders", "taskWrites"]],
+  ["open/none", ["createTask", "event", "priority", "reminders"]],
 ]);
 
 class EventPlanner {
@@ -466,6 +471,7 @@ class Row {
         ? [Temporal.Instant.from(lockAt).add(LOCK_GRACE)]
         : []),
       ...(reminders?.wakes() ?? []),
+      ...task.wakes(item),
     ]
       .toSorted((first, second) => Temporal.Instant.compare(first, second))
       .at(0)
@@ -538,10 +544,12 @@ class TaskPlanner {
     if (!wanted.has("createTask")) return [];
     const section = item.section(stored.section);
     const externalId = `canvas-${key.replace(":", "-")}`;
+    const task = this.#task(item);
     return [
       {
         body: {
           data: {
+            custom_fields: changedCustomFields(task),
             external: { gid: externalId },
             memberships: [{ project: CONFIG.asana.project, section: item.sectionGid(section) }],
             name: item.assignment.name,
@@ -556,7 +564,7 @@ class TaskPlanner {
           `/tasks/external:${externalId}?${new URLSearchParams({ opt_fields: "gid,completed" }).toString()}`,
         ),
         method: "POST",
-        patch: { asana_state: "live", asana_written: item.task, section },
+        patch: { asana_state: "live", asana_written: task, section },
         route: "asanaCreate",
         target: "asana",
         url: asanaUrl("/tasks"),
@@ -600,31 +608,64 @@ class TaskPlanner {
     const { stored, wanted } = this.#row;
     if (!wanted.has("taskWrites") || !stored.asana_gid) return [];
     const written = stored.asana_written;
-    const fields = new Map<string, boolean | null | string>();
-    if (written?.name !== item.task.name) fields.set("name", item.task.name);
-    if (written?.notesHash !== item.task.notesHash) fields.set("notes", item.notes);
-    if (!isDeepStrictEqual(written?.due, item.task.due)) {
+    const task = this.#task(item);
+    const fields = new Map<string, boolean | null | Record<string, string> | string>();
+    if (written?.name !== task.name) fields.set("name", task.name);
+    if (written?.notesHash !== task.notesHash) fields.set("notes", item.notes);
+    if (!isDeepStrictEqual(written?.due, task.due)) {
       for (const field of ASANA_DATES) {
-        if (written?.due[field] ?? item.task.due[field]) {
+        if (written?.due[field] ?? task.due[field]) {
           // oxlint-disable-next-line unicorn/no-null -- Asana clears a date field only for null, and undefined would be dropped from the JSON body and leave the old date set.
-          fields.set(field, item.task.due[field] ?? null);
+          fields.set(field, task.due[field] ?? null);
         }
       }
     }
-    if (Boolean(written?.completed) !== item.task.completed)
-      fields.set("completed", item.task.completed);
+    if (Boolean(written?.completed) !== task.completed) fields.set("completed", task.completed);
+    const customFields = changedCustomFields(task, written);
+    if (Object.keys(customFields).length > 0) fields.set("custom_fields", customFields);
     if (fields.size === 0) return [];
     return [
       {
         body: { data: Object.fromEntries(fields) },
         kind: fields.get("completed") === true ? "completeTask" : "updateTask",
         method: "PUT",
-        patch: { asana_written: item.task },
+        patch: { asana_written: task },
         route: "asanaWrite",
         target: "asana",
         url: asanaUrl(`/tasks/${stored.asana_gid}`),
       },
     ];
+  }
+
+  wakes(item: Item): Temporal.Instant[] {
+    const { now, wanted } = this.#row;
+    if (!wanted.has("priority")) return [];
+    return PRIORITY_STEPS.map(([most]) =>
+      item.due.date.subtract({ days: most }).toZonedDateTime(ZONE).toInstant(),
+    ).filter((at) => Temporal.Instant.compare(at, now) > 0);
+  }
+
+  #task(item: Item): AsanaTask {
+    const { now, stored } = this.#row;
+    const written = stored.asana_written;
+    switch (item.lifecycle) {
+      case "done": {
+        return {
+          ...item.task,
+          priority: written?.priority ?? "none",
+          status: written?.status ?? "done",
+        };
+      }
+      case "missed": {
+        return { ...item.task, priority: "none", status: "missed" };
+      }
+      case "open": {
+        const today = Temporal.Instant.from(now).toZonedDateTimeISO(ZONE).toPlainDate();
+        const daysLeft = today.until(item.due.date).days;
+        const priority = PRIORITY_STEPS.find(([most]) => daysLeft <= most)?.[1] ?? "low";
+        return { ...item.task, priority, status: "todo" };
+      }
+    }
   }
 }
 
@@ -680,6 +721,16 @@ function cancelReminder(id: string): RowAction {
     route: "ntfyCancel",
     target: "ntfy",
     url: `${CONFIG.ntfy.base_url}/${CONFIG.ntfy.topic}/${id}`,
+  };
+}
+
+function changedCustomFields(task: AsanaTask, written?: AsanaWritten): Record<string, string> {
+  const { priority, status } = CONFIG.asana.fields;
+  return {
+    ...(task.priority !== written?.priority && {
+      [priority.gid]: priority.options[task.priority],
+    }),
+    ...(task.status !== written?.status && { [status.gid]: status.options[task.status] }),
   };
 }
 
