@@ -67,6 +67,7 @@ const HAND_CHANGES = new Map<string, AsanaState>([
   ["live/completed", "hand_completed"],
 ]);
 const WANTS = new Map<string, Want[]>([
+  ["done/hand_completed", ["taskWrites"]],
   ["done/live", ["taskWrites"]],
   ["gone/hand_completed", ["deleteTask"]],
   ["gone/live", ["deleteTask"]],
@@ -653,7 +654,7 @@ class TaskPlanner {
         return {
           ...item.task,
           priority: written?.priority ?? "none",
-          status: written?.status ?? "done",
+          status: "done",
         };
       }
       case "missed": {
