@@ -13,7 +13,7 @@ services:
   n8n:
     <<: *hard
     container_name: n8n
-    image: docker.io/n8nio/n8n:3.0.1@sha256:4ebd866ae91d222ffa6dd3731eade80ba71b4d13f7470172a7e66a81fe31faa0
+    image: docker.io/n8nio/n8n:3.1.0@sha256:6e9f220e9cf0d2f17d3c2371c8d8a6fe6720f99b82a9672afb96bf068cfd04a5
     environment:
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: database
@@ -67,7 +67,7 @@ services:
   runners:
     <<: *hard
     container_name: n8n_runners
-    image: ghcr.io/n8n-io/runners:3.0.1@sha256:646753ac617c9b796dc92440206ff369df7508e87257eb85dae1f29bf8cb465f
+    image: ghcr.io/n8n-io/runners:3.1.0@sha256:730c78a31b9d5711319fff053a18e98ba5265f11769c88d1917506e9b33d2616
     environment:
       N8N_RUNNERS_AUTH_TOKEN: ${N8N_RUNNERS_AUTH_TOKEN}
 
@@ -200,7 +200,7 @@ services:
   database:
     <<: *hard
     container_name: n8n_database
-    image: postgres:18@sha256:3a4264520e121176619f54ff867d12774bc81e95e7b84db58d63bccdb6144b81
+    image: postgres:18@sha256:bd5dfa494a5a259704365813dbfa5fa6b3e69be7348d43b547f540c730478583
     user: 999:999
     environment:
       POSTGRES_DB: n8n
@@ -234,7 +234,7 @@ services:
   ntfy:
     <<: *hard
     container_name: n8n_ntfy
-    image: binwiederhier/ntfy:v2.36.0@sha256:fb48c413eb11d50339962b5d62cddce0f800e7f77c626d638a7c20cb7e9c4465
+    image: binwiederhier/ntfy:v2.37.2@sha256:1875ddcf815c8a3c981d6d78c67a93452d0abba79b1ab9520b1f5f5238902bd7
     init: true
     environment:
       NTFY_AUTH_DEFAULT_ACCESS: deny-all
@@ -265,7 +265,7 @@ services:
   nginx:
     <<: *hard
     container_name: n8n_nginx
-    image: nginx:1.31.8@sha256:5ab5b0b01097420873a3f3330f44248e34a3c2a3e8d5ee30658aeae8cb7435da
+    image: nginx:1.31.8@sha256:165ddde8751e75a1c907d24ef10d9f6deb08b57e0fe56caf67512486aff76d82
     ports:
       - 127.0.0.1:443:443
     cap_add:
