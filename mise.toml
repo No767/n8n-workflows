@@ -1,12 +1,12 @@
 [tools]
 python = "3.14.10"
-uv = "0.13.6"
+uv = "0.13.7"
 
 node = "26.13.0"
-pnpm = "12.16.1"
+pnpm = "12.18.0"
 
 jq = "1.8.2"
-yq = "4.54.1"
+yq = "4.54.2"
 gum = "2.0.2"
 
 # Linting and formatting
