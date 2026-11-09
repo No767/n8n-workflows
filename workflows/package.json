@@ -12,8 +12,8 @@
     "eslint-plugin-perfectionist": "^5.12.1",
     "eslint-plugin-regexp": "^3.3.1",
     "eslint-plugin-sonarjs": "^4.2.2",
-    "oxlint": "1.90.0",
-    "oxlint-tsgolint": "7.0.2005",
+    "oxlint": "1.92.0",
+    "oxlint-tsgolint": "7.0.2006",
     "typescript": "npm:@typescript/typescript6@^6.0.2"
   }
 }
