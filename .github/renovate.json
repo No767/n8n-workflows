@@ -5,7 +5,9 @@
     "helpers:pinGitHubActionDigests",
     "abandonments:recommended"
   ],
-  "dependencyDashboard": false,
+  "dependencyDashboard": {
+    "enabled": false
+  },
   "separateMajorMinor": false,
   "ignoreDeps": ["python"],
   "docker-compose": {
@@ -46,6 +48,15 @@
         "* 0-3 1 * *"
       ],
       "automerge": true
+    },
+    {
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "postgres"
+      ],
+      "allowedVersions": "<19"
     },
     {
       "matchManagers": [
