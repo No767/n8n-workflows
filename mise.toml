@@ -1,6 +1,6 @@
 [tools]
 python = "3.14.10"
-uv = "0.13.8"
+uv = "0.13.9"
 
 node = "26.13.1"
 pnpm = "12.21.0"
@@ -15,7 +15,7 @@ yamllint = "1.38.0"
 
 "pypi:nginxfmt" = "1.4.0"
 shfmt = "3.14.1"
-dprint = "0.64.3"
+dprint = "0.65.0"
 
 # Encryption
 sops = "3.13.3"
